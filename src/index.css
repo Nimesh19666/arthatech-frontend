@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/*
+  THEME: periwinkle / lavender / orchid pastels
+  Pastels = backgrounds and soft highlights.
+  Deep violet = buttons, links, active items (so white text stays readable).
+  Deep indigo = text and the sidebar.
+*/
+@theme {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+
+  /* The palette from your image */
+  --color-periwinkle: #b8c0ff;
+  --color-lavender: #c8b6fe;
+  --color-orchid: #e7c5ff;
+
+  /* Surfaces */
+  --color-paper: #ffffff;
+  --color-mist: #f6f3ff;
+  --color-line: #ddd6f3;
+
+  /* Text and sidebar */
+  --color-ink: #1e1b3a;
+  --color-ink-soft: #2a2650;
+
+  /* Main accent: a deeper shade of the same violet */
+  --color-brand: #6b5bd6;
+  --color-brand-dark: #5446ba;
+  --color-brand-light: #efe4ff;
+
+  /* Errors and "Deny" need their own color so they do not look like normal buttons */
+  --color-danger: #d6336c;
+  --color-danger-light: #fde8ef;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply font-sans text-ink antialiased;
+    min-height: 100vh;
+    background: linear-gradient(160deg, #dfe3ff 0%, #ece6ff 55%, #f4e5ff 100%);
+    background-attachment: fixed;
+  }
+  ::selection {
+    @apply bg-lavender text-ink;
+  }
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition placeholder:text-ink/35 focus:border-brand focus:ring-2 focus:ring-lavender/60;
+  }
+  .input-error {
+    @apply border-danger;
+  }
+}
