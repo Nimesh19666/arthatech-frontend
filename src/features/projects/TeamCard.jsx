@@ -141,12 +141,12 @@ export default function TeamCard({ team, open, onToggle, canManage, onEdit, onDe
                             {[m.job_title, m.phone].filter(Boolean).join(" · ") || "No details"}
                           </p>
                         </div>
-                        {(canManage || (canUser && m.is_team_head)) && (
+                        {(
                           <div className="flex flex-wrap gap-1">
                             {canUser && orgId && m.is_team_head && !(m.has_login || m.user_id) && (
                               <ActionBtn onClick={() => setLoginFor(m)}>Create login</ActionBtn>
                             )}
-                            {canManage && (
+                            {(
                               <>
                             <ActionBtn onClick={() => setModal({ type: "edit", row: m })}>Edit</ActionBtn>
                             <ActionBtn onClick={() => setActive(m, !active)}>{active ? "Deactivate" : "Activate"}</ActionBtn>
@@ -162,11 +162,10 @@ export default function TeamCard({ team, open, onToggle, canManage, onEdit, onDe
                   })}
                 </ul>
               )}
-              {canManage && (
-                <Button variant="outline" className="mt-3 !py-2" onClick={() => setModal({ type: "add" })}>
-                  + Add member
-                </Button>
-              )}
+              {/* Always shown. The server checks the permission and the error shows here if it is refused. */}
+              <Button variant="outline" className="mt-3 !py-2" onClick={() => setModal({ type: "add" })}>
+                + Add member
+              </Button>
             </>
           )}
         </div>

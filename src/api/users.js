@@ -16,6 +16,9 @@ export const updateUser = (userId, body) => api(`/users/${userId}`, { method: "P
 export const updateProfile = (profileId, body) => api(`/profiles/${profileId}`, { method: "PATCH", body });
 
 /** Returns { generated_password } - show once. */
+/** Returns { status: "ok", result: "deleted" | "anonymised" } */
+export const deleteUser = (userId) => api(`/users/${userId}`, { method: "DELETE" });
+
 export const resetPassword = (userId) => api(`/users/${userId}/reset-password`, { method: "POST" });
 
 /** action: lock | unlock | deactivate | activate */

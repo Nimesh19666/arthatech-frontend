@@ -6,6 +6,44 @@ import { Alert, Button, Field } from "../components/ui.jsx";
 import { errorText, fieldError } from "../lib/errors.js";
 import { takeExpired } from "../api/client";
 
+/** Password box with a show / hide eye button */
+function PasswordField({ label, error, ...props }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-semibold">{label}</span>
+        <span className="relative block">
+          <input {...props} type={show ? "text" : "password"} className={`input !pr-11 ${error ? "input-error" : ""}`} />
+          <button
+            type="button"
+            onClick={() => setShow(!show)}
+            aria-label={show ? "Hide password" : "Show password"}
+            aria-pressed={show}
+            className="absolute inset-y-0 right-0 grid w-11 cursor-pointer place-items-center text-ink/50 hover:text-ink"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              {show ? (
+                <>
+                  <path d="M3 3l18 18" />
+                  <path d="M10.6 6.1A10.7 10.7 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3.2 3.9M6.6 7.6A17 17 0 0 0 2.5 12S6 18 12 18c1.4 0 2.6-.3 3.7-.8" />
+                  <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+                </>
+              ) : (
+                <>
+                  <path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </>
+              )}
+            </svg>
+          </button>
+        </span>
+        {error && <span className="mt-1 block text-xs font-medium text-brand">{error}</span>}
+      </label>
+    </div>
+  );
+}
+
 // Steps: credentials -> (change password) -> (pick role) -> (email code) -> in
 export default function LoginPage() {
   const { status, signIn } = useAuth();
@@ -171,9 +209,8 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 error={fieldError(error, "email")}
               />
-              <Field
+              <PasswordField
                 label="Password"
-                type="password"
                 autoComplete="current-password"
                 required
                 value={password}
@@ -193,9 +230,8 @@ export default function LoginPage() {
                 <p className="mt-1 text-sm text-ink/60">You must change your password before you continue.</p>
               </div>
               <Alert>{error && errorText(error)}</Alert>
-              <Field
+              <PasswordField
                 label="New password"
-                type="password"
                 autoComplete="new-password"
                 required
                 autoFocus

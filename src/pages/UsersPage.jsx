@@ -14,7 +14,7 @@ import { fmtDateTime } from "../lib/projectMeta.js";
 import { ROLES, roleName } from "../lib/roles.js";
 
 export default function UsersPage() {
-  const { can } = useAuth();
+  const { can, user: me } = useAuth();
   const confirm = useConfirm();
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
@@ -59,6 +59,31 @@ export default function UsersPage() {
 
   const canCreate = can("users.create.user") || can("users.create.admin");
   const suffix = (u) => (u.roleCode === "admin" ? "admin" : "user");
+
+  async function removeUser(u) {
+    const ok = await confirm({
+      title: `Delete ${u.name || u.email}?`,
+      message:
+        "This removes the person and ALL their roles, project links and extra permissions. If they have activity history, only their personal data is wiped and a blank record stays for the audit log.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    setBusyKey(u.key);
+    setError(null);
+    try {
+      const res = await usersApi.deleteUser(u.userId);
+      setNotice(
+        res?.result === "anonymised"
+          ? `${u.email} had history, so their data was wiped and a blank record was kept`
+          : `Deleted: ${u.email}`
+      );
+      await load();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusyKey(null);
+    }
+  }
 
   async function run(u, action, doneText) {
     if (action === "deactivate") {
@@ -206,6 +231,11 @@ export default function UsersPage() {
                               {u.active ? "Deactivate" : "Activate"}
                             </button>
                           </>
+                        )}
+                        {can(`users.delete.${suffix(u)}`) && String(u.userId) !== String(me?.id) && (
+                          <button disabled={busy} className={`${act} text-brand`} onClick={() => removeUser(u)}>
+                            Delete
+                          </button>
                         )}
                         {can("profile_permission.manage") && u.profileId && (
                           <button disabled={busy} className={act} onClick={() => setPermFor(u)}>

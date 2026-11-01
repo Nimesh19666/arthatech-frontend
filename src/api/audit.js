@@ -1,31 +1,49 @@
 import { api } from "./client";
 
-// ASSUMPTION: your API list has no audit endpoint yet. This calls GET /audit-logs.
-// When the backend adds it, change AUDIT_PATH below if the address is different.
-export const AUDIT_PATH = "/auth/audit-logs";
+// The server may serve this at /audit-logs or /auth/audit-logs. We try the first, then the second.
+const PATHS = ["/audit-logs", "/auth/audit-logs"];
+let working = null;
 
-export const listAudit = () => api(AUDIT_PATH);
+/** params: { action, target_type, date_from, date_to, user_id, limit, offset } */
+export async function listAudit(params = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== "" && v !== null && v !== undefined) q.set(k, v);
+  const qs = q.toString() ? `?${q}` : "";
+  const order = working ? [working] : PATHS;
+  let last;
+  for (const path of order) {
+    try {
+      const res = await api(path + qs);
+      working = path;
+      return res;
+    } catch (e) {
+      last = e;
+      if (e.status !== 404) throw e;
+    }
+  }
+  throw last;
+}
 
-const text = (v) => {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "string" || typeof v === "number") return String(v);
-  return v.email || v.full_name || v.name || v.code || JSON.stringify(v);
-};
+export const DELETED_EMAIL = /^deleted-\d+@deleted\.invalid$/;
 
-/** Reads common field names, so small differences in the backend response still work. */
+/** Reads { total, limit, offset, results: [...] } */
 export function normalizeAudit(data) {
-  const list = Array.isArray(data) ? data : data?.results || data?.logs || data?.data || [];
-  return list.map((e, i) => ({
-    key: e.id ?? i,
-    when: e.created_at ?? e.timestamp ?? e.at ?? e.time ?? e.date ?? null,
-    who: text(e.actor_email ?? e.actor ?? e.user_email ?? e.user ?? e.performed_by) || "System",
-    role: text(e.actor_role ?? e.role),
-    action: text(e.action ?? e.event ?? e.event_type ?? e.verb),
-    target: [text(e.target ?? e.object ?? e.entity ?? e.model ?? e.object_type), text(e.object_id ?? e.target_id)]
-      .filter(Boolean)
-      .join(" #"),
-    detail: e.detail ?? e.details ?? e.message ?? e.description ?? e.changes ?? e.metadata ?? null,
-    ip: text(e.ip ?? e.ip_address),
-    raw: e,
-  }));
+  const list = Array.isArray(data) ? data : data?.results || [];
+  const rows = list.map((e, i) => {
+    const email = e.user?.email || "";
+    const deleted = DELETED_EMAIL.test(email);
+    return {
+      key: e.id ?? i,
+      when: e.created_at ?? null,
+      who: deleted ? "Deleted user" : e.user?.full_name || email || "System",
+      whoEmail: deleted ? "" : email,
+      role: e.profile?.role_code || "",
+      action: e.action || "",
+      target: [e.target_type, e.target_id].filter((x) => x !== null && x !== undefined && x !== "").join(" #"),
+      details: e.details && typeof e.details === "object" ? e.details : null,
+      ip: e.ip_address || "",
+      org: e.organisation?.name || "",
+    };
+  });
+  return { rows, total: Array.isArray(data) ? rows.length : (data?.total ?? rows.length) };
 }
