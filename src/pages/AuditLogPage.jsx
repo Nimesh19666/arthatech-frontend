@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import * as auditApi from "../api/audit";
 import { Alert, Button } from "../components/ui.jsx";
+import FormModal from "../components/FormModal.jsx";
+import { useConfirm } from "../components/Confirm.jsx";
+import { useToast } from "../components/Toast.jsx";
 import { TableRowsSkeleton } from "../components/Skeleton.jsx";
 import { errorText } from "../lib/errors.js";
 import { fmtDateTime } from "../lib/projectMeta.js";
@@ -36,6 +39,10 @@ export default function AuditLogPage() {
   const [target, setTarget] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const confirm = useConfirm();
+  const toast = useToast();
+  const [selected, setSelected] = useState(() => new Set());
+  const [dateModal, setDateModal] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,6 +51,7 @@ export default function AuditLogPage() {
         await auditApi.listAudit({ action: action.trim(), target_type: target, date_from: from, date_to: to, limit: LIMIT, offset })
       );
       setRows(res.rows);
+      setSelected(new Set());
       setTotal(res.total);
       setError(null);
     } catch (e) {
@@ -67,6 +75,51 @@ export default function AuditLogPage() {
     setOffset(0);
   };
 
+  const toggle = (id) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allOnPage = rows.length > 0 && rows.every((r) => selected.has(r.key));
+  const toggleAll = () => setSelected(allOnPage ? new Set() : new Set(rows.map((r) => r.key)));
+
+  const done = (res, fallback) => {
+    const n = res?.deleted ?? res?.count ?? res?.purged;
+    toast.success(n !== undefined ? `Deleted ${n} log ${n === 1 ? "entry" : "entries"}` : fallback);
+  };
+
+  async function deleteSelected() {
+    const ids = [...selected];
+    const ok = await confirm({
+      title: `Delete ${ids.length} log ${ids.length === 1 ? "entry" : "entries"}?`,
+      message: "This permanently removes them from the audit trail. It cannot be undone.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    try {
+      done(await auditApi.purgeAudit({ ids }), "Selected logs deleted");
+      await load();
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function deleteUpTo(v) {
+    const ok = await confirm({
+      title: `Delete all logs up to ${v.date_to}?`,
+      message: "Every log entry on or before that date will be permanently removed. It cannot be undone.",
+      confirmLabel: "Delete all",
+    });
+    if (!ok) return;
+    const res = await auditApi.purgeAudit({ date_to: v.date_to });
+    setDateModal(false);
+    done(res, "Old logs deleted");
+    setOffset(0);
+    await load();
+  }
+
   const first = total === 0 ? 0 : offset + 1;
   const last = Math.min(offset + LIMIT, total);
   const notBuilt = error && error.status === 404;
@@ -79,9 +132,19 @@ export default function AuditLogPage() {
           <h1 className="mt-1 text-4xl font-black tracking-tight">Audit log</h1>
           <p className="mt-1 text-sm text-ink/60">Who did what, and when. Newest first.</p>
         </div>
-        <Button variant="outline" onClick={load}>
-          Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {selected.size > 0 && (
+            <Button variant="danger" onClick={deleteSelected}>
+              Delete selected ({selected.size})
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setDateModal(true)}>
+            Delete up to a date…
+          </Button>
+          <Button variant="outline" onClick={load}>
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {notBuilt ? (
@@ -105,9 +168,12 @@ export default function AuditLogPage() {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-white">
-        <table className="w-full min-w-[52rem] text-left text-sm">
+        <table className="w-full min-w-[56rem] text-left text-sm">
           <thead>
             <tr className="border-b border-line text-xs uppercase tracking-wider text-ink/45">
+              <th className="w-10 px-4 py-3">
+                <input type="checkbox" checked={allOnPage} onChange={toggleAll} aria-label="Select all on this page" className="h-4 w-4 accent-brand" />
+              </th>
               <th className="px-4 py-3 font-bold">When</th>
               <th className="px-4 py-3 font-bold">Who</th>
               <th className="px-4 py-3 font-bold">Action</th>
@@ -116,17 +182,20 @@ export default function AuditLogPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-line align-top">
-            {loading && <TableRowsSkeleton cols={5} />}
+            {loading && <TableRowsSkeleton cols={6} />}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-ink/50">
+                <td colSpan={6} className="px-4 py-10 text-center text-ink/50">
                   No entries found.
                 </td>
               </tr>
             )}
             {!loading &&
               rows.map((r) => (
-                <tr key={r.key}>
+                <tr key={r.key} className={selected.has(r.key) ? "bg-brand-light/40" : ""}>
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selected.has(r.key)} onChange={() => toggle(r.key)} aria-label="Select this entry" className="h-4 w-4 accent-brand" />
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-ink/70">{fmtDateTime(r.when)}</td>
                   <td className="px-4 py-3">
                     <p className={`font-semibold ${r.who === "Deleted user" ? "italic text-ink/60" : ""}`}>{r.who}</p>
@@ -156,6 +225,15 @@ export default function AuditLogPage() {
           </Button>
         </div>
       </div>
+      {dateModal && (
+        <FormModal
+          title="Delete logs up to a date"
+          submitLabel="Continue"
+          fields={[{ name: "date_to", label: "Delete everything up to and including", type: "date", required: true, hint: "Permanent. You will be asked to confirm." }]}
+          onSubmit={deleteUpTo}
+          onClose={() => setDateModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -24,6 +24,23 @@ export async function listAudit(params = {}) {
   throw last;
 }
 
+/** Delete specific logs: { ids: [1,2] }  or everything up to a date: { date_to: "2026-09-30" } */
+export async function purgeAudit(body) {
+  const order = working ? [working] : PATHS;
+  let last;
+  for (const path of order) {
+    try {
+      const res = await api(`${path}/purge`, { method: "POST", body });
+      working = path;
+      return res;
+    } catch (e) {
+      last = e;
+      if (e.status !== 404) throw e;
+    }
+  }
+  throw last;
+}
+
 export const DELETED_EMAIL = /^deleted-\d+@deleted\.invalid$/;
 
 /** Reads { total, limit, offset, results: [...] } */
