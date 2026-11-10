@@ -5,6 +5,7 @@ import * as usersApi from "../api/users";
 import CreateUserModal from "../features/users/CreateUserModal.jsx";
 import PasswordModal from "../features/users/PasswordModal.jsx";
 import { roleName } from "../lib/roles.js";
+import { Link as RouterLink } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthContext.jsx";
 import { useLoad } from "../lib/useLoad.js";
 import { Alert, Badge, Button, Spinner } from "../components/ui.jsx";
@@ -15,6 +16,7 @@ import TeamCard from "../features/projects/TeamCard.jsx";
 import { errorText } from "../lib/errors.js";
 import { formatPaiseShort, rupeesToPaise } from "../lib/money.js";
 import { useConfirm } from "../components/Confirm.jsx";
+import { DEFAULT_TEAMS } from "../lib/defaultTeams.js";
 import { PROJECT_FIELDS, STATUSES, TYPES, fmtDate, label, projectToBody } from "../lib/projectMeta.js";
 
 export default function ProjectDetailPage() {
@@ -94,6 +96,39 @@ export default function ProjectDetailPage() {
     await teams.reload();
   }
 
+  const [seeding, setSeeding] = useState(null); // "3 of 36" while the standard teams are being created
+
+  /** Creates every standard department from the docket that this project does not have yet. */
+  async function addStandardTeams() {
+    const have = new Set((list || []).map((t) => String(t.name).trim().toLowerCase()));
+    const todo = DEFAULT_TEAMS.filter((t) => !have.has(t.name.toLowerCase()));
+    if (todo.length === 0) return setNotice("All the standard teams already exist");
+    const ok = await confirm({
+      title: `Add ${todo.length} standard teams?`,
+      message: "These are the standard film departments (Camera, Art, Light, Junior Artists, vehicles and so on). Create them before adding shoot days. Teams added later do not appear on days that already exist.",
+      confirmLabel: `Add ${todo.length} teams`,
+    });
+    if (!ok) return;
+    let done = 0;
+    try {
+      for (const t of todo) {
+        setSeeding(`${done + 1} of ${todo.length}`);
+        try {
+          await houses.createTeam(projectId, { name: t.name, kind: t.kind });
+        } catch (e) {
+          if (e.status !== 400) throw e; // 400 = already exists, skip it
+        }
+        done += 1;
+      }
+      setNotice(`Added ${done} teams`);
+    } catch (e) {
+      teams.setError(e);
+    } finally {
+      setSeeding(null);
+      await teams.reload();
+    }
+  }
+
   async function removeTeam(t) {
     const ok = await confirm({
       title: `Delete team ${t.name}?`,
@@ -147,9 +182,19 @@ export default function ProjectDetailPage() {
               {openIds && openIds.size === list.length ? "Collapse all" : "Expand all"}
             </Button>
           )}
+          {can("shoot_day.view") && (
+            <RouterLink to={`/projects/${projectId}/shoot-days`} state={{ name: projectName }} className="inline-flex items-center justify-center rounded-xl bg-ink px-5 py-3 text-sm font-bold text-white hover:opacity-90">
+              Shoot days
+            </RouterLink>
+          )}
           {canProject && project && (
             <Button variant="outline" onClick={() => setModal({ type: "project" })}>
               Edit project
+            </Button>
+          )}
+          {canManage && (
+            <Button variant="outline" loading={Boolean(seeding)} onClick={addStandardTeams}>
+              {seeding ? `Adding ${seeding}…` : "Add standard teams"}
             </Button>
           )}
           {canManage && <Button onClick={() => setModal({ type: "create" })}>+ New team</Button>}
@@ -207,11 +252,12 @@ export default function ProjectDetailPage() {
       ) : list.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-ink/20 bg-white/60 p-10 text-center">
           <p className="text-lg font-extrabold">No teams yet</p>
-          <p className="mt-1 text-sm text-ink/60">Create a team (for example Camera or Art), then add its members.</p>
+          <p className="mt-1 text-sm text-ink/60">Start with the standard film departments, or create your own.</p>
           {canManage && (
-            <Button className="mt-4" onClick={() => setModal({ type: "create" })}>
-              + New team
-            </Button>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <Button loading={Boolean(seeding)} onClick={addStandardTeams}>{seeding ? `Adding ${seeding}…` : "Add the standard teams"}</Button>
+              <Button variant="outline" onClick={() => setModal({ type: "create" })}>+ New team</Button>
+            </div>
           )}
         </div>
       ) : (

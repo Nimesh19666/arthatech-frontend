@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthContext.jsx";
 import HatSwitcher from "./HatSwitcher.jsx";
+import SyncBadge, { SyncToasts, useSyncStatus } from "./SyncBadge.jsx";
+import { useConfirm } from "./Confirm.jsx";
 
 function Logo() {
   return (
@@ -15,11 +17,14 @@ function Logo() {
 }
 
 export default function AppShell() {
-  const { user, profile, can, logout } = useAuth();
+  const { me, user, profile, can, logout: doLogout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false); // mobile sidebar
   const [userMenu, setUserMenu] = useState(false);
+  const sync = useSyncStatus();
+  const confirm = useConfirm();
+  const pid = me?.profile?.project_id ?? me?.project_id ?? me?.project?.id ?? me?.profile?.project?.id;
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
@@ -31,9 +36,14 @@ export default function AppShell() {
   }, [userMenu]);
 
   // The menu is built from permissions. Later modules get added to this list.
+  const isAuditor = profile?.role_code === "auditor";
+  const daysTo = pid ? `/projects/${pid}/shoot-days` : null;
+  const onDays = (path) => path.startsWith("/shoot-days/") || /^\/projects\/[^/]+\/shoot-days/.test(path);
   const nav = [
-    { to: "/", label: "Dashboard", end: true, show: true },
-    { to: "/houses", label: "Houses", show: can("house.create") || can("project.view") },
+    // Auditors work only on shoot days, so a dashboard would be an empty page for them
+    { to: "/", label: "Dashboard", end: true, show: !isAuditor },
+    ...(daysTo && can("shoot_day.view") ? [{ to: daysTo, label: "Shoot days", show: true, match: onDays }] : []),
+    { to: "/houses", label: "Houses", show: can("house.create") || (can("project.view") && !isAuditor) },
     {
       to: "/users",
       label: "Users",
@@ -41,6 +51,18 @@ export default function AppShell() {
     },
     { to: "/audit", label: "Audit log", show: can("audit.view") },
   ].filter((i) => i.show);
+
+  async function logout() {
+    if (sync.pending > 0) {
+      const ok = await confirm({
+        title: "Log out with unsaved changes?",
+        message: `${sync.pending} change${sync.pending === 1 ? " is" : "s are"} still waiting to be saved. Log out only after you are online, or they will stay on this device until you log in again.`,
+        confirmLabel: "Log out anyway",
+      });
+      if (!ok) return;
+    }
+    doLogout();
+  }
 
   const initials = (user?.full_name || user?.email || "?")
     .split(/[\s@]+/)
@@ -62,7 +84,7 @@ export default function AppShell() {
             end={item.end}
             className={({ isActive }) =>
               `block rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
-                isActive ? "bg-brand text-white" : "text-white/70 hover:bg-white/10 hover:text-white"
+                (item.match ? item.match(location.pathname) : isActive) ? "bg-brand text-white" : "text-white/70 hover:bg-white/10 hover:text-white"
               }`
             }
           >
@@ -102,6 +124,7 @@ export default function AppShell() {
         </div>
 
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <SyncBadge />
           <HatSwitcher />
           <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
             <button
@@ -137,6 +160,7 @@ export default function AppShell() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+        <SyncToasts />
         <Outlet />
       </main>
     </div>

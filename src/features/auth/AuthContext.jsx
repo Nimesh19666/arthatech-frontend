@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as authApi from "../../api/auth";
+import { setSyncUser } from "../../lib/outbox";
+import * as idb from "../../lib/idb";
 import { clearTokens, getRefreshToken, hasSession, markExpired, setAuthLostHandler, setTokens } from "../../api/client";
 
 const AuthContext = createContext(null);
@@ -9,9 +11,24 @@ export function AuthProvider({ children }) {
   const [state, setState] = useState({ status: "loading", me: null });
 
   const loadMe = useCallback(async () => {
-    const me = await authApi.me();
-    setState({ status: "authed", me });
-    return me;
+    try {
+      const me = await authApi.me();
+      setSyncUser(me?.user?.id ?? null);
+      idb.kvSet("last-me", me);
+      setState({ status: "authed", me });
+      return me;
+    } catch (e) {
+      // Offline with a saved session: use the copy of "me" kept on this device
+      if (e?.status === 0 && hasSession()) {
+        const saved = await idb.kvGet("last-me");
+        if (saved) {
+          setSyncUser(saved?.user?.id ?? null);
+          setState({ status: "authed", me: saved });
+          return saved;
+        }
+      }
+      throw e;
+    }
   }, []);
 
   // On app start: if a session exists, try to restore it (the client refreshes if needed).
@@ -63,6 +80,8 @@ export function AuthProvider({ children }) {
       /* sign out locally even if the server call fails */
     }
     clearTokens();
+    setSyncUser(null);
+    idb.kvDel("last-me");
     setState({ status: "anon", me: null });
   }, []);
 

@@ -30,3 +30,15 @@ export function formatPaiseShort(paise) {
 export function rupeesToPaise(value) {
   return Math.round(Number(value) * 100);
 }
+
+/** What a rupee amount (as typed) means in plain Indian words: 150000 -> "₹1,50,000 · 1.5 lakh" */
+export function rupeesInWords(value) {
+  const n = Number(value);
+  if (value === "" || value === null || value === undefined || Number.isNaN(n) || n <= 0) return "";
+  const grouped = `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(n)}`;
+  const trim = (x) => String(Math.round(x * 100) / 100);
+  if (n >= 1e7) return `${grouped} · ${trim(n / 1e7)} crore`;
+  if (n >= 1e5) return `${grouped} · ${trim(n / 1e5)} lakh`;
+  if (n >= 1e3) return `${grouped} · ${trim(n / 1e3)} thousand`;
+  return grouped;
+}
