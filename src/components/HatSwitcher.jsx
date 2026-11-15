@@ -1,11 +1,14 @@
+import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Alert, Button, Field, Modal } from "./ui.jsx";
 import { useAuth } from "../features/auth/AuthContext.jsx";
+import { homeFor } from "../lib/home.js";
 import { errorText } from "../lib/errors.js";
 
 /** Switch hat without logging in again. Asks for an email code only if the server needs one. */
 export default function HatSwitcher() {
   const { profile, otherProfiles, switchProfile } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState(null); // profile waiting for an OTP
   const [emailHint, setEmailHint] = useState("");
@@ -32,6 +35,7 @@ export default function HatSwitcher() {
       } else {
         setTarget(null);
         setOpen(false);
+        navigate(homeFor(p), { replace: true });
       }
     } catch (e) {
       setError(e);
@@ -40,14 +44,14 @@ export default function HatSwitcher() {
     }
   }
 
-  const label = profile ? `${profile.role_name}${profile.organisation_name ? ` · ${profile.organisation_name}` : ""}` : "";
+  const label = profile ? `${profile.role_name}${profile.project_name ? ` · ${profile.project_name}` : profile.organisation_name ? ` · ${profile.organisation_name}` : ""}` : "";
   const canSwitch = otherProfiles.length > 0;
 
   return (
     <div className="relative min-w-0" onClick={(e) => e.stopPropagation()}>
       <button
         onClick={() => canSwitch && setOpen(!open)}
-        className={`flex max-w-[10.5rem] items-center sm:max-w-[16rem] gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm font-semibold ${canSwitch ? "cursor-pointer hover:border-ink" : "cursor-default"}`}
+        className={`flex w-full max-w-[10.5rem] items-center sm:max-w-[16rem] gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm font-semibold ${canSwitch ? "cursor-pointer hover:border-ink" : "cursor-default"}`}
       >
         <span className="h-2 w-2 shrink-0 rounded-full bg-brand" />
         <span className="truncate">{label}</span>
@@ -66,7 +70,7 @@ export default function HatSwitcher() {
               className="block w-full cursor-pointer rounded-lg px-3 py-2.5 text-left hover:bg-mist disabled:opacity-50"
             >
               <span className="block text-sm font-semibold">{p.role_name}</span>
-              <span className="block text-xs text-ink/50">{p.organisation_name || "Platform"}</span>
+              <span className="block text-xs text-ink/50">{[p.project_name, p.organisation_name || "Platform"].filter(Boolean).join(" · ")}</span>
             </button>
           ))}
         </div>

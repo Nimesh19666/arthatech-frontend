@@ -1,36 +1,16 @@
 @import "tailwindcss";
 
-/*
-  THEME: periwinkle / lavender / orchid pastels
-  Pastels = backgrounds and soft highlights.
-  Deep violet = buttons, links, active items (so white text stays readable).
-  Deep indigo = text and the sidebar.
-*/
 @theme {
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
 
-  /* The palette from your image */
-  --color-periwinkle: #b8c0ff;
-  --color-lavender: #c8b6fe;
-  --color-orchid: #e7c5ff;
-
-  /* Surfaces */
-  --color-paper: #ffffff;
-  --color-mist: #f6f3ff;
-  --color-line: #ddd6f3;
-
-  /* Text and sidebar */
-  --color-ink: #1e1b3a;
-  --color-ink-soft: #2a2650;
-
-  /* Main accent: a deeper shade of the same violet */
   --color-brand: #6b5bd6;
-  --color-brand-dark: #5446ba;
-  --color-brand-light: #efe4ff;
-
-  /* Errors and "Deny" need their own color so they do not look like normal buttons */
-  --color-danger: #d6336c;
-  --color-danger-light: #fde8ef;
+  --color-brand-dark: #5846c0;
+  --color-brand-light: #ece9f8;
+  --color-ink: #1e1b3a;
+  --color-ink-soft: #2b2752;
+  --color-paper: #ffffff;
+  --color-mist: #f3f0ff;
+  --color-line: #ddd6f3;
 }
 
 @layer base {
@@ -40,19 +20,26 @@
   body {
     @apply font-sans text-ink antialiased;
     min-height: 100vh;
-    background: linear-gradient(160deg, #dfe3ff 0%, #ece6ff 55%, #f4e5ff 100%);
-    background-attachment: fixed;
+    background: linear-gradient(135deg, #e3e4ff 0%, #efe5ff 100%) fixed;
   }
   ::selection {
-    @apply bg-lavender text-ink;
+    @apply bg-brand text-white;
   }
 }
 
 @layer components {
   .input {
-    @apply w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition placeholder:text-ink/35 focus:border-brand focus:ring-2 focus:ring-lavender/60;
+    @apply w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-ink/35 focus:border-ink focus:ring-2 focus:ring-brand/20;
   }
   .input-error {
-    @apply border-danger;
+    @apply border-brand;
   }
+}
+
+/* One-line rows when the team panel is wide enough */
+@container (min-width: 48rem) {
+  .compact-row .cell-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .compact-row .cell-hint { display: none; }
+  .compact-row .tick { padding-top: 0; justify-content: center; }
+  .compact-row .tick-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 }

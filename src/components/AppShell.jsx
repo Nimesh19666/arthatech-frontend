@@ -4,6 +4,7 @@ import { useAuth } from "../features/auth/AuthContext.jsx";
 import HatSwitcher from "./HatSwitcher.jsx";
 import SyncBadge, { SyncToasts, useSyncStatus } from "./SyncBadge.jsx";
 import { useConfirm } from "./Confirm.jsx";
+import { CardsSkeleton, Skeleton } from "./Skeleton.jsx";
 
 function Logo() {
   return (
@@ -17,7 +18,7 @@ function Logo() {
 }
 
 export default function AppShell() {
-  const { me, user, profile, can, logout: doLogout } = useAuth();
+  const { me, user, profile, can, switching, logout: doLogout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false); // mobile sidebar
@@ -36,13 +37,13 @@ export default function AppShell() {
   }, [userMenu]);
 
   // The menu is built from permissions. Later modules get added to this list.
-  const isAuditor = profile?.role_code === "auditor";
+  const isAuditor = profile?.role_code === "auditor" || profile?.role_code === "head_auditor";
   const daysTo = pid ? `/projects/${pid}/shoot-days` : null;
   const onDays = (path) => path.startsWith("/shoot-days/") || /^\/projects\/[^/]+\/shoot-days/.test(path);
   const nav = [
     // Auditors work only on shoot days, so a dashboard would be an empty page for them
     { to: "/", label: "Dashboard", end: true, show: !isAuditor },
-    ...(daysTo && can("shoot_day.view") ? [{ to: daysTo, label: "Shoot days", show: true, match: onDays }] : []),
+    ...(profile?.organisation_id ? [{ to: "/projects", label: "Projects", end: true, show: true }] : []),
     { to: "/houses", label: "Houses", show: can("house.create") || (can("project.view") && !isAuditor) },
     {
       to: "/users",
@@ -51,6 +52,15 @@ export default function AppShell() {
     },
     { to: "/audit", label: "Audit log", show: can("audit.view") },
   ].filter((i) => i.show);
+  // The default (current) project always has its own tabs in the sidebar
+  const projNav = pid
+    ? [
+        ...(can("project.view") && !isAuditor ? [{ to: `/projects/${pid}`, label: "Overview", end: true }] : []),
+        ...(can("shoot_day.view") ? [{ to: daysTo, label: "Shoot days", match: onDays }] : []),
+      ]
+    : [];
+  const linkCls = (active) =>
+    `block rounded-lg px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-brand text-white" : "text-white/70 hover:bg-white/10 hover:text-white"}`;
 
   async function logout() {
     if (sync.pending > 0) {
@@ -92,12 +102,25 @@ export default function AppShell() {
           </NavLink>
         ))}
       </div>
-      <p className="mt-auto text-xs text-white/35">Money in rupees · v1 records only</p>
+      {projNav.length > 0 && (
+        <div className="mt-6">
+          <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-white/40">Current project</p>
+          <p className="mb-2 mt-1 break-words px-3 text-sm font-bold text-white">{profile?.project_name || "Project"}</p>
+          <div className="space-y-1">
+            {projNav.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => linkCls(item.match ? item.match(location.pathname) : isActive)}>
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="mt-auto pt-6 text-xs text-white/35">Money in rupees · v1 records only</p>
     </nav>
   );
 
   return (
-    <div className="min-h-screen lg:pl-64">
+    <div className="min-h-screen overflow-x-clip lg:pl-64">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">{sidebar}</aside>
 
@@ -109,7 +132,7 @@ export default function AppShell() {
         </div>
       )}
 
-      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur sm:px-6">
+      <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-2 overflow-visible border-b border-line bg-white/90 px-4 backdrop-blur sm:px-6">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setMenuOpen(true)}
@@ -123,7 +146,7 @@ export default function AppShell() {
           </div>
         </div>
 
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
           <SyncBadge />
           <HatSwitcher />
           <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -161,7 +184,15 @@ export default function AppShell() {
 
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <SyncToasts />
-        <Outlet />
+        {switching ? (
+          <div className="space-y-6" role="status" aria-label="Switching role">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-10 w-64" />
+            <CardsSkeleton count={2} />
+          </div>
+        ) : (
+          <Outlet />
+        )}
       </main>
     </div>
   );

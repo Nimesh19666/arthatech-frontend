@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as idb from "../lib/idb";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
 import { Cell } from "../features/shoot/Cell.jsx";
-import TeamSection from "../features/shoot/TeamSection.jsx";
+import TeamSection, { TeamList } from "../features/shoot/TeamSection.jsx";
 import { AUDIT, fdate, hhmm, paiseToRupees } from "../features/shoot/format";
 import { cacheKey, computeTotals, useShootDay } from "../features/shoot/useShootDay";
 import { Alert, Badge, Button, Field } from "../components/ui.jsx";
@@ -53,7 +53,8 @@ export default function ShootDayPage() {
   const sd = useShootDay(dayId);
   const { model, state } = sd;
 
-  const [open, setOpen] = useState({});
+  const detailRef = useRef(null);
+  const [sel, setSel] = useState(null); // team chosen in the Teams step
   const [onlyActive, setOnlyActive] = useState(false);
   const [modal, setModal] = useState(null);
   const [status, setStatus] = useState("pending");
@@ -73,10 +74,10 @@ export default function ShootDayPage() {
   const idKey = teamIds.join(",");
   useEffect(() => {
     if (!model) return;
-    const single = teamIds.length === 1;
+    const selId = sel ?? teamIds[0];
     if (step === "crew" || step === "check" || onlyActive) sd.ensureTabs(teamIds, { workers: 6 });
-    else if (step === "teams") sd.ensureTabs(teamIds.filter((id) => open[id] ?? single), { workers: 3, members: true });
-  }, [step, open, onlyActive, idKey, Boolean(model), sync.pending === 0]); // eslint-disable-line react-hooks/exhaustive-deps
+    else if (step === "teams") sd.ensureTabs(selId ? [selId] : [], { workers: 1, members: true });
+  }, [step, sel, onlyActive, idKey, Boolean(model), sync.pending === 0]); // eslint-disable-line react-hooks/exhaustive-deps
   const setDocketFig = (k, v) =>
     setDocket((d) => {
       const n = { ...d, [k]: v };
@@ -92,7 +93,7 @@ export default function ShootDayPage() {
     if (!projectId) return undefined;
     let alive = true;
     const key = cacheKey(`days:${projectId}`);
-    shoot.listDays(projectId).then((l) => alive && setSiblings(l)).catch(async () => {
+    shoot.listDays(projectId, { reuse: true }).then((l) => alive && setSiblings(l)).catch(async () => {
       const saved = await idb.kvGet(key);
       if (alive && saved) setSiblings(saved);
     });
@@ -145,6 +146,8 @@ export default function ShootDayPage() {
     return !t || t.entries.length || t.vehicles.length || t.expenses.length;
   });
 
+  const selRow = rows.find((r) => r.day_team_id === sel) || rows[0];
+
   async function online(fn, okText) {
     setBusy(true);
     try {
@@ -184,6 +187,7 @@ export default function ShootDayPage() {
     }, "Saved");
   }
 
+  const money = Boolean(day.totals);
   const words = (p) => rupeesInWords(p / 100).split(" · ")[1] || "";
   const vouchers = day.vouchers || [];
   const voucherTotal = vouchers.reduce((a, v) => a + (Number(v.amount_paise) || 0), 0);
@@ -193,6 +197,8 @@ export default function ShootDayPage() {
   const allLoaded = day.teams.every((r) => model.tabs[r.day_team_id]);
   const crewDocketTotal = crewRows.reduce((a, r) => a + (Number(declaredOf(r)) || 0), 0);
   const crewEnteredTotal = crewRows.reduce((a, r) => a + (model.tabs[r.day_team_id]?.entries.length || 0), 0);
+  const counts = Boolean(day.totals) || allLoaded;
+  const crewCount = day.totals ? totals.crew ?? 0 : crewEnteredTotal;
   const allEntries = day.teams.flatMap((r) => (model.tabs[r.day_team_id]?.entries || []).map((e) => ({ ...e, team: r.name })));
   const presentRows = allEntries.filter((e) => e.attendance === "present");
   const noTimes = presentRows.filter((e) => !e.in_time || !e.out_time);
@@ -216,7 +222,9 @@ export default function ShootDayPage() {
       : { state: countOff.length ? "warn" : "ok", title: "Expected count against people:", detail: countOff.length ? `${countOff.map((r) => `${r.name} (expected ${declaredOf(r)}, entered ${model.tabs[r.day_team_id].entries.length})`).join("; ")}.` : "every team matches.", go: "crew" },
     { state: noTimes.length ? "warn" : "ok", title: "Present people with no in or out time:", detail: noTimes.length ? `${noTimes.length} (${[...new Set(noTimes.map((e) => e.team))].join(", ")}).` : "none.", go: "teams" },
     { state: unsigned.length ? "warn" : "ok", title: "Present people not marked signed:", detail: unsigned.length ? `${unsigned.length}.` : "none.", go: "teams" },
-    totals.budget_paise > 0
+    !money
+      ? null
+      : totals.budget_paise > 0
       ? { state: over ? "warn" : "ok", title: "Spending against the day budget:", detail: `${formatPaise(totals.spent_paise)} of ${formatPaise(totals.budget_paise)}${over ? ", over budget" : ""}.`, go: "details" }
       : { state: "info", title: "Day budget:", detail: "not set.", go: "details" },
   ].filter(Boolean);
@@ -225,7 +233,7 @@ export default function ShootDayPage() {
     { key: "details", title: "Day details", sub: "Times and crew names", help: "Location, shift, call, roll and pack-up times, scenes and the crew names.", done: Boolean(day.location && day.call_time) },
     { key: "vouchers", title: "Cash vouchers", sub: `${vouchers.length} added`, help: "One row per cash voucher: reference, person, department, narration and amount.", done: vouchers.length > 0 },
     { key: "crew", title: "Crew count", sub: `${crewDocketTotal} expected`, help: "Type the expected headcount for each team. The app compares it with the people you add next.", done: crewRows.length > 0 && countUnset.length === 0 },
-    { key: "teams", title: "Teams", sub: `${totals.crew ?? 0} people`, help: "For each team: who came, in and out time, signed or not. Then vehicles and expenses.", done: (totals.crew ?? 0) > 0 },
+    { key: "teams", title: "Teams", sub: `${crewCount} people`, help: "For each team: who came, in and out time, signed or not. Then vehicles and expenses.", done: crewCount > 0 },
     { key: "check", title: canSign ? "Check and sign off" : "Check", sub: attention.length ? `${attention.length} to look at` : a.label, help: "See what does not add up, then verify the day or raise a query.", done: verified },
   ];
   const idx = steps.findIndex((x) => x.key === step);
@@ -255,10 +263,10 @@ export default function ShootDayPage() {
               {sync.pending > 0 ? (offline ? `${sync.pending} saved on this device` : "Saving…") : offline ? "Offline · saved on this device" : "All changes saved"}
             </p>
           </div>
-          <span className="hidden text-xs sm:block"><b>{formatPaise(totals.spent_paise)}</b> <span className="text-ink/50">of {formatPaise(totals.budget_paise)}</span></span>
+          {money && <span className="hidden text-xs sm:block"><b>{formatPaise(totals.spent_paise)}</b> <span className="text-ink/50">of {formatPaise(totals.budget_paise)}</span></span>}
           <span className="ml-auto sm:ml-0"><Badge tone={a.tone}>{a.label}</Badge></span>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-mist"><div className={`h-full ${over ? "bg-brand-dark" : "bg-ink"}`} style={{ width: `${pct}%` }} /></div>
+        {money && <div className="mt-2 h-1 overflow-hidden rounded-full bg-mist"><div className={`h-full ${over ? "bg-brand-dark" : "bg-ink"}`} style={{ width: `${pct}%` }} /></div>}
       </div>
 
       {state.source === "cache" && <Alert tone="info">Showing the copy saved on this device. It will refresh when you are back online.</Alert>}
@@ -284,15 +292,15 @@ export default function ShootDayPage() {
 
       
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {stat("Budget", formatPaise(totals.budget_paise), words(totals.budget_paise) && <p className="mt-0.5 text-xs font-semibold text-ink/50">{words(totals.budget_paise)}</p>)}
-        {stat("Spent", formatPaise(totals.spent_paise), (
+        {money && stat("Budget", formatPaise(totals.budget_paise), words(totals.budget_paise) && <p className="mt-0.5 text-xs font-semibold text-ink/50">{words(totals.budget_paise)}</p>)}
+        {money && stat("Spent", formatPaise(totals.spent_paise), (
           <>
             {words(totals.spent_paise) && <p className="mt-0.5 text-xs font-semibold text-ink/50">{words(totals.spent_paise)}</p>}
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-mist"><div className={`h-full ${over ? "bg-brand-dark" : "bg-ink"}`} style={{ width: `${pct}%` }} /></div>
           </>
         ))}
         {stat("Cash vouchers", formatPaise(voucherTotal), words(voucherTotal) && <p className="mt-0.5 text-xs font-semibold text-ink/50">{words(voucherTotal)}</p>)}
-        {stat("Present / crew", `${totals.present} / ${totals.crew}`, <p className="mt-0.5 text-xs text-ink/50">{totals.teams_active} of {totals.teams_total} teams active</p>)}
+        {counts && stat("Present / crew", `${totals.present} / ${totals.crew}`, <p className="mt-0.5 text-xs text-ink/50">{totals.teams_active} of {totals.teams_total} teams active</p>)}
       </div>
 
       <p className="text-sm text-ink/60">{cur.help}</p>
@@ -352,7 +360,7 @@ export default function ShootDayPage() {
               const match = tab && set && Number(dec) === have;
               return (
                 <div key={r.day_team_id} className="flex flex-wrap items-end gap-x-4 gap-y-2 px-4 py-3">
-                  <button onClick={() => { setOpen((o) => ({ ...o, [r.day_team_id]: true })); setStep("teams"); }} className="min-w-[10rem] flex-1 cursor-pointer break-words text-left font-bold hover:text-brand">{r.name} <span className="text-xs font-semibold text-ink/40">open →</span></button>
+                  <button onClick={() => { setSel(r.day_team_id); setStep("teams"); }} className="min-w-[10rem] flex-1 cursor-pointer break-words text-left font-bold hover:text-brand">{r.name} <span className="text-xs font-semibold text-ink/40">open →</span></button>
                   <Cell className="w-28" label="Expected count" type="number" min="0" disabled={!canEdit} value={set ? dec : ""} onSave={(v) => sd.editTeam(r.day_team_id, { declared_headcount: v === "" ? null : Number(v) })} />
                   <div className="w-20 text-center"><p className="text-[11px] font-semibold uppercase tracking-wide text-ink/45">Entered</p><p className="font-mono text-lg font-semibold">{have ?? "…"}</p></div>
                   <div className="w-24">{!tab ? <Badge>Loading</Badge> : !set ? <Badge>No count</Badge> : match ? <Badge tone="dark">Matches</Badge> : <Badge tone="red">{have - Number(dec) > 0 ? "+" : ""}{have - Number(dec)} off</Badge>}</div>
@@ -379,20 +387,28 @@ export default function ShootDayPage() {
             </div>
           }
         >
-          {rows.length === 0 && <p className="p-4 text-sm text-ink/55">No teams with entries yet. Untick the filter and open a team to add people.</p>}
-          {rows.map((r) => (
-            <TeamSection
-              key={r.day_team_id}
-              row={r}
-              tab={model.tabs[r.day_team_id]}
-              open={open[r.day_team_id] ?? day.teams.length === 1}
-              onToggle={() => setOpen((o) => ({ ...o, [r.day_team_id]: !(o[r.day_team_id] ?? day.teams.length === 1) }))}
-              sd={sd}
-              canEdit={canEdit}
-              online={!offline}
-              onRemoveTeam={(row) => online(async () => { await shoot.removeDayTeam(row.day_team_id); await sd.reload({ silent: true }); }, "Team removed")}
-            />
-          ))}
+          {rows.length === 0 ? (
+            <p className="p-4 text-sm text-ink/55">No teams with entries yet. Untick the filter to see every team.</p>
+          ) : (
+            <div className="grid lg:grid-cols-[13rem_minmax(0,1fr)]">
+              <div className="max-h-64 overflow-y-auto border-b border-line lg:max-h-[75vh] lg:border-b-0 lg:border-r">
+                <TeamList rows={rows} tabs={model.tabs} selected={selRow?.day_team_id} onSelect={(id) => { setSel(id); if (window.innerWidth < 1024) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }} />
+              </div>
+              <div ref={detailRef} className="min-w-0 scroll-mt-24">
+                {selRow && (
+                  <TeamSection
+                    key={selRow.day_team_id}
+                    row={selRow}
+                    tab={model.tabs[selRow.day_team_id]}
+                    sd={sd}
+                    canEdit={canEdit}
+                    online={!offline}
+                    onRemoveTeam={(row) => online(async () => { await shoot.removeDayTeam(row.day_team_id); setSel(null); await sd.reload({ silent: true }); }, "Team removed")}
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </Panel>
       )}
 

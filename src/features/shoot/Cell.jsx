@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { rupeesInWords } from "../../lib/money.js";
 
-const LABEL = "mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-ink/45";
+const LABEL = "cell-label mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-ink/45";
 
 /** A small labelled input that saves when you leave it (not on every key). */
 export function Cell({ label, value, onSave, type = "text", disabled = false, className = "", placeholder, min }) {
@@ -32,7 +32,7 @@ export function Cell({ label, value, onSave, type = "text", disabled = false, cl
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         className={`input !py-1.5 text-sm disabled:opacity-60 ${type === "time" ? "!px-2" : ""}`}
       />
-      {type === "number" && /₹/.test(label) && v !== "" && <span className="mt-0.5 block text-[11px] font-medium text-ink/50">{rupeesInWords(v)}</span>}
+      {type === "number" && /₹/.test(label) && v !== "" && <span className="cell-hint mt-0.5 block text-[11px] font-medium text-ink/50">{rupeesInWords(v)}</span>}
     </label>
   );
 }
@@ -54,9 +54,9 @@ export function Pick({ label, value, onSave, options, disabled = false, classNam
 
 export function Tick({ label, checked, onSave, disabled = false }) {
   return (
-    <label className="flex min-w-0 items-center gap-2 pt-4 text-sm font-semibold">
-      <input type="checkbox" checked={Boolean(checked)} disabled={disabled} onChange={(e) => onSave(e.target.checked)} className="h-4 w-4 accent-brand" />
-      {label}
+    <label className="tick flex min-w-0 items-center gap-2 pt-4 text-sm font-semibold">
+      <input aria-label={label} type="checkbox" checked={Boolean(checked)} disabled={disabled} onChange={(e) => onSave(e.target.checked)} className="h-4 w-4 accent-brand" />
+      <span className="tick-text">{label}</span>
     </label>
   );
 }

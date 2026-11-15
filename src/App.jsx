@@ -10,6 +10,7 @@ import HousesPage from "./pages/HousesPage.jsx";
 import HouseDetailPage from "./pages/HouseDetailPage.jsx";
 import ProjectDetailPage from "./pages/ProjectDetailPage.jsx";
 import AuditLogPage from "./pages/AuditLogPage.jsx";
+import ProjectsPage from "./pages/ProjectsPage.jsx";
 import ShootDaysPage from "./pages/ShootDaysPage.jsx";
 import ShootDayPage from "./pages/ShootDayPage.jsx";
 
@@ -17,7 +18,7 @@ import ShootDayPage from "./pages/ShootDayPage.jsx";
 function Home() {
   const { me, can } = useAuth();
   const pid = me?.profile?.project_id ?? me?.project_id ?? me?.project?.id ?? me?.profile?.project?.id;
-  const fieldOnly = me?.profile?.role_code === "auditor" || (can("shoot_day.view") && !can("house.create") && !can("users.view") && !can("project.create"));
+  const fieldOnly = ["auditor", "head_auditor"].includes(me?.profile?.role_code) || (can("shoot_day.view") && !can("house.create") && !can("users.view") && !can("project.create"));
   if (fieldOnly && pid) return <Navigate to={`/projects/${pid}/shoot-days`} replace />;
   return <DashboardPage />;
 }
@@ -56,6 +57,7 @@ export default function App() {
         />
         <Route path="houses" element={<HousesPage />} />
         <Route path="houses/:orgId" element={<HouseDetailPage />} />
+        <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="projects/:projectId/shoot-days" element={<ProtectedRoute anyOf={["shoot_day.view"]}><ShootDaysPage /></ProtectedRoute>} />
         <Route path="shoot-days/:dayId" element={<ProtectedRoute anyOf={["shoot_day.view"]}><ShootDayPage /></ProtectedRoute>} />

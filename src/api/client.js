@@ -86,10 +86,11 @@ async function send(path, { method = "GET", body, auth = true } = {}) {
 
   if (!res.ok) {
     const err = data && data.error;
+    const detail = data && typeof data.detail === "string" ? data.detail : "";
     throw new ApiError(
       res.status,
       (err && err.code) || "server_error",
-      (err && err.message) || "Something went wrong.",
+      (err && err.message) || detail || "Something went wrong.",
       (err && err.fields) || {}
     );
   }
@@ -119,7 +120,19 @@ function refreshTokens() {
   return refreshing;
 }
 
-export async function api(path, opts = {}) {
+const inflight = new Map();
+export function api(path, opts = {}) {
+  const method = (opts.method || "GET").toUpperCase();
+  if (method !== "GET") return call(path, opts);
+  // Two parts of the screen asking for the same thing at the same moment share one request
+  const key = path;
+  if (inflight.has(key)) return inflight.get(key);
+  const p = call(path, opts).finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+async function call(path, opts = {}) {
   try {
     return await send(path, opts);
   } catch (e) {

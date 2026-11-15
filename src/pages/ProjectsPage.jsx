@@ -1,153 +1,135 @@
-import { useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
-import * as houses from "../api/houses";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import * as authApi from "../api/auth";
+import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
-import { useLoad } from "../lib/useLoad.js";
-import { Alert, Badge, Button } from "../components/ui.jsx";
-import { ActionBtn, Table } from "../components/Table.jsx";
-import FormModal from "../components/FormModal.jsx";
+import ProjectCard from "../features/auth/ProjectCard.jsx";
+import { Alert } from "../components/ui.jsx";
+import { CardsSkeleton } from "../components/Skeleton.jsx";
+import { homeFor } from "../lib/home.js";
 import { errorText } from "../lib/errors.js";
 
-const TYPES = [
-  { value: "movie", label: "Movie" },
-  { value: "ott_series", label: "OTT series" },
-  { value: "ad", label: "Ad" },
-  { value: "other", label: "Other" },
-];
-const STATUSES = [
-  { value: "draft", label: "Draft" },
-  { value: "planning", label: "Planning" },
-  { value: "active", label: "Active" },
-  { value: "wrapped", label: "Wrapped" },
-  { value: "closed", label: "Closed" },
-];
-const label = (list, value) => list.find((x) => x.value === value)?.label || value || "—";
-
-const fmtDate = (s) =>
-  s ? new Date(s).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-
-const FIELDS = [
-  { name: "name", label: "Project name", required: true },
-  { name: "project_type", label: "Type", as: "select", options: TYPES, required: true },
-  { name: "status", label: "Status", as: "select", options: STATUSES },
-  { name: "start_date", label: "Start date", type: "date" },
-  { name: "end_date", label: "End date", type: "date" },
-];
-
-// Send only the fields that have a value
-function toBody(v) {
-  const body = { name: v.name.trim(), project_type: v.project_type };
-  if (v.status) body.status = v.status;
-  if (v.start_date) body.start_date = v.start_date;
-  if (v.end_date) body.end_date = v.end_date;
-  return body;
-}
-
 export default function ProjectsPage() {
-  const { orgId } = useParams();
-  const houseName = useLocation().state?.name || `House #${orgId}`;
-  const { can } = useAuth();
-  const { data, loading, error, setError, reload } = useLoad(() => houses.listProjects(orgId), [orgId]);
-  const [modal, setModal] = useState(null); // { type: "create" | "edit", row? }
-  const [notice, setNotice] = useState("");
+  const { profile, otherProfiles, switchProfile } = useAuth();
+  const navigate = useNavigate();
+  const [list, setList] = useState(null);
+  const [q, setQ] = useState("");
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  async function finish(message) {
-    setModal(null);
-    setNotice(message);
-    await reload();
-  }
+  useEffect(() => {
+    let alive = true;
+    authApi
+      .myProjects()
+      .then((r) => alive && setList(r.profiles || r.projects || (Array.isArray(r) ? r : [])))
+      .catch(() => {
+        // Backend has no project list with progress yet: use the roles this login already knows
+        if (alive) setList([profile, ...otherProfiles].filter((p) => p && p.organisation_id === profile?.organisation_id && p.project_id));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [profile, otherProfiles]);
 
-  async function remove(p) {
-    if (!window.confirm(`Delete ${p.name}? This only works if it has no teams or expenses.`)) return;
-    setNotice("");
+  // Until the server sends progress for every project, work it out for the one we can read
+  const [mine, setMine] = useState(null);
+  useEffect(() => {
+    const pid = profile?.project_id;
+    if (!pid || !list || list.some((p) => p.project_id === pid && p.progress)) return undefined;
+    let alive = true;
+    (async () => {
+      try {
+        const days = await shoot.listDays(pid, { reuse: true });
+        const proj = null; // GET /projects/<id> is not allowed for this role
+        const n = (s) => days.filter((d) => d.audit_status === s).length;
+        const total = days.length;
+        const verified = n("verified");
+        const dates = days.map((d) => d.shoot_date).filter(Boolean).sort();
+        if (alive)
+          setMine({
+            project_id: pid,
+            progress: {
+              status: proj?.status,
+              project_type: proj?.project_type,
+              start_date: proj?.start_date,
+              end_date: proj?.end_date,
+              shoot_days_total: total,
+              shoot_days_verified: verified,
+              shoot_days_pending: n("pending"),
+              shoot_days_query_raised: n("query_raised"),
+              verified_percent: total ? Math.round((verified / total) * 100) : 0,
+              last_shoot_date: dates[dates.length - 1],
+            },
+          });
+      } catch {
+        /* no access to the days: the card just stays plain */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [list, profile]);
+
+  const shown = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return (list || []).map((p) => (mine && p.project_id === mine.project_id && !p.progress ? { ...p, progress: mine.progress } : p)).filter((p) => !t || `${p.project_name} ${p.role_name}`.toLowerCase().includes(t));
+  }, [list, q, mine]);
+
+  // One card per project. If you hold two roles on it, the other role is a small button under the card.
+  const groups = useMemo(() => {
+    const m = new Map();
+    for (const p of shown) {
+      const g = m.get(p.project_id) || [];
+      g.push(p);
+      m.set(p.project_id, g);
+    }
+    return [...m.values()].map((g) => {
+      const main = g.find((x) => x.profile_id === profile?.profile_id) || g[0];
+      return { main, others: g.filter((x) => x !== main) };
+    });
+  }, [shown, profile]);
+
+  async function pick(p) {
+    if (p.profile_id === profile?.profile_id) return navigate(homeFor(p));
+    setBusy(true);
+    setError(null);
     try {
-      await houses.deleteProject(p.id);
-      await finish(`Deleted ${p.name}`);
+      await switchProfile(p.profile_id);
+      navigate(homeFor(p), { replace: true });
     } catch (e) {
       setError(e);
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-ink/55">
-            <Link to="/houses" className="hover:text-brand">
-              Houses
-            </Link>{" "}
-            / {houseName}
-          </p>
-          <h1 className="mt-1 text-4xl font-black tracking-tight">Projects</h1>
-        </div>
-        {can("project.create") && <Button onClick={() => setModal({ type: "create" })}>+ New project</Button>}
+      <div>
+        <p className="text-sm font-bold uppercase tracking-widest text-brand">{profile?.organisation_name || "Your house"}</p>
+        <h1 className="mt-1 text-4xl font-black tracking-tight">Projects</h1>
       </div>
 
-      {notice && <Alert tone="success">{notice}</Alert>}
+      <input className="input sm:max-w-sm" type="search" placeholder="Search projects…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search projects" />
       <Alert>{error && errorText(error)}</Alert>
 
-      <Table heads={["Project", "Type", "Status", "Dates", "Actions"]} loading={loading} isEmpty={data.length === 0} empty="No projects yet.">
-        {data.map((p) => (
-          <tr key={p.id}>
-            <td className="px-4 py-3 font-bold">{p.name}</td>
-            <td className="px-4 py-3">{label(TYPES, p.project_type)}</td>
-            <td className="px-4 py-3">
-              <Badge tone={p.status === "active" ? "dark" : "neutral"}>{label(STATUSES, p.status)}</Badge>
-            </td>
-            <td className="px-4 py-3 text-ink/60">
-              {fmtDate(p.start_date)} → {fmtDate(p.end_date)}
-            </td>
-            <td className="px-4 py-3">
-              <div className="flex flex-wrap justify-end gap-1">
-                <Link
-                  to={`/projects/${p.id}`}
-                  state={{ name: p.name, orgId, houseName }}
-                  className="rounded-md px-2 py-1 text-xs font-semibold text-brand hover:bg-brand-light"
-                >
-                  Teams →
-                </Link>
-                {can("project.create") && <ActionBtn onClick={() => setModal({ type: "edit", row: p })}>Edit</ActionBtn>}
-                {can("project.create") && (
-                  <ActionBtn danger onClick={() => remove(p)}>
-                    Delete
-                  </ActionBtn>
-                )}
-              </div>
-            </td>
-          </tr>
-        ))}
-      </Table>
-
-      {modal?.type === "create" && (
-        <FormModal
-          title="New project"
-          submitLabel="Create"
-          fields={FIELDS}
-          initial={{ project_type: "movie", status: "draft" }}
-          onSubmit={async (v) => {
-            await houses.createProject(orgId, toBody(v));
-            await finish("Project created");
-          }}
-          onClose={() => setModal(null)}
-        />
-      )}
-      {modal?.type === "edit" && (
-        <FormModal
-          title="Edit project"
-          fields={FIELDS}
-          initial={{
-            name: modal.row.name,
-            project_type: modal.row.project_type,
-            status: modal.row.status,
-            start_date: modal.row.start_date || "",
-            end_date: modal.row.end_date || "",
-          }}
-          onSubmit={async (v) => {
-            await houses.updateProject(modal.row.id, toBody(v));
-            await finish("Project saved");
-          }}
-          onClose={() => setModal(null)}
-        />
+      {!list ? (
+        <CardsSkeleton count={3} />
+      ) : shown.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-ink/20 bg-white/60 p-10 text-center text-sm text-ink/60">{q ? "No project matches your search." : "You are not on any project in this house yet."}</p>
+      ) : (
+        <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {groups.map(({ main, others }) => (
+            <div key={main.project_id} className="flex flex-col gap-2">
+              <ProjectCard p={main} current={main.profile_id === profile?.profile_id} busy={busy} onPick={() => pick(main)} />
+              {others.map((o) => (
+                <button key={o.profile_id} disabled={busy} onClick={() => pick(o)} className="cursor-pointer rounded-lg border border-line bg-white px-3 py-2 text-left text-xs font-semibold text-ink/70 hover:border-brand hover:text-brand">
+                  Open as {o.role_name} →
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -10,22 +10,41 @@ import { PAY_MODES, fmtHours, hhmm, paiseToRupees } from "./format";
 const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const rupees = (v) => rupeesToPaise(v === "" ? 0 : v);
 
-function Row({ children, onRemove, disabled, title, head, cols = "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" }) {
+/** One record on one line when there is room (wide panel), labelled fields stacked when there is not. */
+function Row({ children, onRemove, disabled, lead, cols }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-3">
-      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <p className="min-w-0 flex-1 break-words text-sm font-bold">{title || "—"}</p>
-        {head}
-        {onRemove && !disabled && (
-          <button onClick={onRemove} className="cursor-pointer text-xs font-semibold text-brand hover:underline">
-            Remove
-          </button>
-        )}
-      </div>
-      <div className={`grid gap-2 ${cols}`}>{children}</div>
+    <div className={`compact-row grid grid-cols-2 items-center gap-2 rounded-xl border border-line bg-white p-2.5 @3xl:px-2.5 @3xl:py-2 ${cols}`}>
+      {lead}
+      {children}
+      {onRemove && !disabled ? (
+        <button onClick={onRemove} aria-label="Remove" title="Remove" className="col-span-2 cursor-pointer rounded-lg px-2 py-1 text-xs font-semibold text-brand hover:bg-brand-light @3xl:col-span-1 @3xl:text-base">
+          <span className="@3xl:hidden">Remove</span>
+          <span className="hidden @3xl:inline">✕</span>
+        </button>
+      ) : (
+        <span className="hidden @3xl:block" />
+      )}
     </div>
   );
 }
+
+function Head({ cols, labels }) {
+  return (
+    <div className={`hidden gap-2 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink/45 @3xl:grid ${cols}`}>
+      {labels.map((l, i) => (
+        <span key={i}>{l}</span>
+      ))}
+      <span />
+    </div>
+  );
+}
+
+const PEOPLE_COLS = "@3xl:grid-cols-[minmax(0,1.3fr)_8rem_8rem_4.5rem_6.5rem_5rem_minmax(0,1.1fr)_3rem_2rem]";
+const PEOPLE_HEAD = ["Name", "In", "Out", "Hours", "Status", "Paid ₹", "Remarks", "Signed"];
+const VEH_COLS = "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_8rem_4.5rem_4.5rem_5.5rem_2rem]";
+const VEH_HEAD = ["Vehicle no.", "Type", "Vendor", "Driver", "Report", "Start km", "End km", "Amount ₹"];
+const EXP_COLS = "@3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_4.5rem_6rem_9.5rem_minmax(0,1fr)_3.5rem_2rem]";
+const EXP_HEAD = ["Item", "Vendor", "Qty", "Amount ₹", "Paid by", "Remarks", "Bill"];
 
 function AddPersonModal({ sd, row, tab, onClose }) {
   const [members, setMembers] = useState(null);
@@ -98,7 +117,8 @@ function AddPersonModal({ sd, row, tab, onClose }) {
   );
 }
 
-export default function TeamSection({ row, tab, open, onToggle, sd, canEdit, online, onRemoveTeam }) {
+/** The panel for ONE team (chosen from the list on the left) */
+export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTeam }) {
   const confirm = useConfirm();
   const [modal, setModal] = useState(null);
   const dt = row.day_team_id;
@@ -115,30 +135,26 @@ export default function TeamSection({ row, tab, open, onToggle, sd, canEdit, onl
   }
 
   return (
-    <details open={open} onToggle={(e) => e.currentTarget.open !== open && onToggle()} className="group border-t border-line first:border-t-0">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3 hover:bg-mist/60">
-        <span className="text-xs text-ink/40 transition group-open:rotate-90">▸</span>
-        <span className="min-w-[8rem] flex-1 break-words font-bold">{row.name}</span>
-        {tab ? (
+    <>
+    <div className="@container">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-3">
+        <h3 className="min-w-0 flex-1 break-words text-lg font-extrabold">{row.name}</h3>
+        {tab && (
           <span className="flex flex-wrap items-center gap-2 text-xs">
-            {crew ? <span className="text-ink/60">{present} present / {tab.entries.length}{tab.declared_headcount != null ? ` (expected ${tab.declared_headcount})` : ""}</span> : <span className="text-ink/60">{tab.vehicles.length} vehicles</span>}
+            {crew ? <span className="text-ink/60">{present} present / {tab.entries.length}{tab.declared_headcount != null ? ` (expected ${tab.declared_headcount})` : ""}</span> : <span className="text-ink/60">{tab.vehicles.length} vehicle{tab.vehicles.length === 1 ? "" : "s"}</span>}
             {spent > 0 && <span className="font-bold">{formatPaise(spent)}</span>}
             {tab.team.roster_locked && <Badge tone="red">Roster locked</Badge>}
           </span>
-        ) : open ? (
-          <Skeleton className="h-4 w-24" />
-        ) : (
-          <span className="text-xs text-ink/50">{row.declared_headcount != null ? `expected ${row.declared_headcount} · ` : ""}tap to open</span>
         )}
-      </summary>
+      </div>
 
-      {open && (
-        <div className="space-y-4 px-4 pb-5">
+      {(
+        <div className="space-y-4 px-4 py-4">
           {!tab ? (
             <Skeleton className="h-24 w-full" />
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid max-w-md grid-cols-2 gap-3">
                 {crew && (
                   <Cell label="Expected count" type="number" min="0" disabled={off} value={tab.declared_headcount ?? ""} onSave={(v) => sd.editTeam(dt, { declared_headcount: v === "" ? null : Number(v) })} />
                 )}
@@ -159,30 +175,30 @@ export default function TeamSection({ row, tab, open, onToggle, sd, canEdit, onl
                     )}
                   </div>
                   {tab.entries.length === 0 && <p className="rounded-lg bg-mist/60 p-3 text-sm text-ink/55">No people on this day yet.</p>}
+                  {tab.entries.length > 0 && <Head cols={PEOPLE_COLS} labels={PEOPLE_HEAD} />}
                   {tab.entries.map((e) => (
                     <Row
                       key={e.id}
-                      title={e.name}
+                      cols={PEOPLE_COLS}
                       disabled={off}
-                      cols="grid-cols-2 sm:grid-cols-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(8.5rem,1fr)_minmax(8.5rem,1fr)_minmax(4.5rem,.6fr)_minmax(6rem,1fr)_minmax(5rem,.9fr)_minmax(0,1.5fr)]"
-                      head={
-                        <label className="flex items-center gap-1.5 text-sm font-semibold">
-                          <input type="checkbox" checked={Boolean(e.signed)} disabled={off} onChange={(ev) => sd.editEntry(dt, e.id, { signed: ev.target.checked })} className="h-4 w-4 accent-brand" />
-                          Signed
-                        </label>
-                      }
                       onRemove={() => sd.removeEntry(dt, e.id)}
+                      lead={
+                        <div className="col-span-2 min-w-0 @3xl:col-span-1">
+                          <p className="break-words text-sm font-bold leading-tight">{e.name}</p>
+                          {e.role && <p className="break-words text-xs text-ink/50">{e.role}</p>}
+                        </div>
+                      }
                     >
-                      <Cell label="Role" disabled={off} value={e.role} onSave={(v) => sd.editEntry(dt, e.id, { role: v })} />
                       <Cell label="Time in" type="time" disabled={off} value={hhmm(e.in_time)} onSave={(v) => sd.editEntry(dt, e.id, { in_time: v })} />
                       <Cell label="Time out" type="time" disabled={off} value={hhmm(e.out_time)} onSave={(v) => sd.editEntry(dt, e.id, { out_time: v })} />
                       <div>
-                        <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-ink/45">Hours</span>
-                        <p className="py-1.5 font-mono text-sm">{fmtHours(e.hours)}</p>
+                        <span className="cell-label mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-ink/45">Hours</span>
+                        <p className="whitespace-nowrap py-1.5 font-mono text-sm">{fmtHours(e.hours)}</p>
                       </div>
                       <Pick label="Status" disabled={off} value={e.attendance} onSave={(v) => sd.editEntry(dt, e.id, { attendance: v })} options={[{ value: "present", label: "Present" }, { value: "absent", label: "Absent" }]} />
                       <Cell label="Paid (₹)" type="number" min="0" disabled={off} value={paiseToRupees(e.paid_paise)} onSave={(v) => sd.editEntry(dt, e.id, { paid_paise: rupees(v) })} />
-                      <Cell className="col-span-2 sm:col-span-4 lg:col-span-1" label="Remarks" disabled={off} value={e.remarks} onSave={(v) => sd.editEntry(dt, e.id, { remarks: v })} />
+                      <Cell className="col-span-2 @3xl:col-span-1" label="Remarks" placeholder="Remarks" disabled={off} value={e.remarks} onSave={(v) => sd.editEntry(dt, e.id, { remarks: v })} />
+                      <Tick label="Signed" disabled={off} checked={e.signed} onSave={(v) => sd.editEntry(dt, e.id, { signed: v })} />
                     </Row>
                   ))}
                 </div>
@@ -193,8 +209,9 @@ export default function TeamSection({ row, tab, open, onToggle, sd, canEdit, onl
                     {canEdit && <Button className="!px-3 !py-1.5 !text-xs" onClick={() => setModal("vehicle")}>+ Add vehicle</Button>}
                   </div>
                   {tab.vehicles.length === 0 && <p className="rounded-lg bg-mist/60 p-3 text-sm text-ink/55">No vehicles on this day yet.</p>}
+                  {tab.vehicles.length > 0 && <Head cols={VEH_COLS} labels={VEH_HEAD} />}
                   {tab.vehicles.map((v) => (
-                    <Row key={v.id} title={v.vehicle_no || "Vehicle"} disabled={off} onRemove={() => sd.removeVehicle(dt, v.id)}>
+                    <Row key={v.id} cols={VEH_COLS} disabled={off} onRemove={() => sd.removeVehicle(dt, v.id)}>
                       <Cell label="Vehicle no." disabled={off} value={v.vehicle_no} onSave={(x) => sd.editVehicle(dt, v.id, { vehicle_no: x })} />
                       <Cell label="Type" disabled={off} value={v.vehicle_type} onSave={(x) => sd.editVehicle(dt, v.id, { vehicle_type: x })} />
                       <Cell label="Vendor" disabled={off} value={v.vendor} onSave={(x) => sd.editVehicle(dt, v.id, { vendor: x })} />
@@ -214,15 +231,16 @@ export default function TeamSection({ row, tab, open, onToggle, sd, canEdit, onl
                   {canEdit && <Button variant="outline" className="!px-3 !py-1.5 !text-xs" onClick={() => setModal("expense")}>+ Expense</Button>}
                 </div>
                 {tab.expenses.length === 0 && <p className="rounded-lg bg-mist/60 p-3 text-sm text-ink/55">No expenses for this team.</p>}
+                {tab.expenses.length > 0 && <Head cols={EXP_COLS} labels={EXP_HEAD} />}
                 {tab.expenses.map((x) => (
-                  <Row key={x.id} title={x.description} disabled={off} onRemove={() => sd.removeExpense(dt, x.id)}>
+                  <Row key={x.id} cols={EXP_COLS} disabled={off} onRemove={() => sd.removeExpense(dt, x.id)}>
                     <Cell label="Item" disabled={off} value={x.description} onSave={(v) => v.trim() && sd.editExpense(dt, x.id, { description: v.trim() })} />
                     <Cell label="Vendor" disabled={off} value={x.vendor} onSave={(v) => sd.editExpense(dt, x.id, { vendor: v })} />
                     <Cell label="Qty" disabled={off} value={x.quantity} onSave={(v) => sd.editExpense(dt, x.id, { quantity: v })} />
                     <Cell label="Amount (₹)" type="number" min="0" disabled={off} value={paiseToRupees(x.amount_paise)} onSave={(v) => sd.editExpense(dt, x.id, { amount_paise: rupees(v) })} />
                     <Pick label="Paid by" disabled={off} value={x.pay_mode} onSave={(v) => sd.editExpense(dt, x.id, { pay_mode: v })} options={PAY_MODES} />
+                    <Cell className="col-span-2 @3xl:col-span-1" label="Remarks" placeholder="Remarks" disabled={off} value={x.remarks} onSave={(v) => sd.editExpense(dt, x.id, { remarks: v })} />
                     <Tick label="Bill available" disabled={off} checked={x.has_bill} onSave={(v) => sd.editExpense(dt, x.id, { has_bill: v })} />
-                    <Cell className="col-span-2" label="Remarks" disabled={off} value={x.remarks} onSave={(v) => sd.editExpense(dt, x.id, { remarks: v })} />
                   </Row>
                 ))}
               </div>
@@ -236,6 +254,7 @@ export default function TeamSection({ row, tab, open, onToggle, sd, canEdit, onl
           )}
         </div>
       )}
+      </div>
 
       {modal === "person" && tab && <AddPersonModal sd={sd} row={row} tab={tab} onClose={() => setModal(null)} />}
       {modal === "time" && tab && (
@@ -289,6 +308,35 @@ export default function TeamSection({ row, tab, open, onToggle, sd, canEdit, onl
           onClose={() => setModal(null)}
         />
       )}
-    </details>
+    </>
+  );
+}
+
+/** Left-hand list: every team on the day, one line each */
+export function TeamList({ rows, tabs, selected, onSelect }) {
+  return (
+    <ul className="divide-y divide-line">
+      {rows.map((r) => {
+        const tab = tabs[r.day_team_id];
+        const crew = tab ? tab.team.kind === "crew" : r.kind !== "vehicle";
+        const present = tab ? tab.entries.filter((e) => e.attendance === "present").length : null;
+        const spent = tab ? sum(tab.entries, (e) => e.paid_paise) + sum(tab.vehicles, (v) => v.amount_paise) + sum(tab.expenses, (x) => x.amount_paise) : 0;
+        const on = selected === r.day_team_id;
+        return (
+          <li key={r.day_team_id}>
+            <button onClick={() => onSelect(r.day_team_id)} aria-current={on ? "true" : undefined} className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left transition ${on ? "bg-brand text-white" : "hover:bg-mist/70"}`}>
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-sm font-bold leading-tight">{r.name}</span>
+                <span className={`block text-xs ${on ? "text-white/80" : "text-ink/50"}`}>
+                  {!tab ? (r.declared_headcount != null ? `expected ${r.declared_headcount}` : "tap to open") : crew ? `${present} / ${tab.entries.length} present${tab.declared_headcount != null ? ` · exp ${tab.declared_headcount}` : ""}` : `${tab.vehicles.length} vehicle{tab.vehicles.length === 1 ? "" : "s"}`}
+                  {spent > 0 ? ` · ${formatPaise(spent)}` : ""}
+                </span>
+              </span>
+              <span className={on ? "text-white/80" : "text-ink/30"}>›</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

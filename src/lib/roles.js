@@ -5,6 +5,7 @@ export const ROLES = [
   { code: "line_producer", name: "Line Producer", level: "house" },
   { code: "project_manager", name: "Project Manager", level: "house" },
   { code: "auditor", name: "Auditor", level: "house" },
+  { code: "head_auditor", name: "Head Auditor", level: "house" },
   { code: "accountant", name: "Accountant", level: "house" },
   { code: "finance", name: "Finance", level: "house" },
   { code: "team_head", name: "Team Head", level: "house" },

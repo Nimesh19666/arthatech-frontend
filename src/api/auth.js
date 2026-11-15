@@ -8,6 +8,15 @@ export const login = (email, password) => post("/auth/login", { email, password 
 export const changePasswordFirst = (stage_token, new_password) =>
   post("/auth/change-password-first", { stage_token, new_password }, false);
 
+/** Login step 2: the houses this person can enter */
+export const organisations = (stage_token) => post("/auth/organisations", { stage_token }, false);
+
+/** Login step 3: this person's profiles in one house (null = Platform), each with its project's progress */
+export const profilesIn = (stage_token, organisation_id) => post("/auth/profiles", { stage_token, organisation_id }, false);
+
+/** In the app: my projects in the current house, with progress. Asks the backend; may not exist yet. */
+export const myProjects = () => api("/auth/my-projects");
+
 /** otp must be a STRING like "012345" */
 export const selectProfile = (stage_token, profile_id, otp) =>
   post("/auth/select-profile", { stage_token, profile_id, ...(otp ? { otp } : {}) }, false);

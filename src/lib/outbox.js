@@ -39,6 +39,9 @@ export const onSyncEvent = (f) => {
 export const newTmpId = () => `tmp-${Math.random().toString(36).slice(2, 10)}`;
 export const isTmp = (v) => typeof v === "string" && v.startsWith("tmp-");
 export const getSyncUserId = () => userId;
+let profileScope = null;
+/** Saved screens are kept per role, so one role never briefly sees what another role was shown */
+export const getSyncScope = () => `${userId}p${profileScope}`;
 export const pendingCount = (dayId) => mine().filter((o) => String(o.dayId) === String(dayId)).length;
 
 async function ensureLoaded() {
@@ -51,8 +54,9 @@ async function ensureLoaded() {
   await loadPromise;
 }
 
-export function setSyncUser(id) {
+export function setSyncUser(id, profileId) {
   userId = id ?? null;
+  profileScope = profileId ?? null;
   ensureLoaded().then(() => {
     emitStatus();
     if (userId) flush();

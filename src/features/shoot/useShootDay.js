@@ -4,16 +4,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as shoot from "../../api/shoot";
 import * as idb from "../../lib/idb";
-import { cancelFor, enqueue, flush, getSyncUserId, isTmp, newTmpId, onSyncEvent, pendingCount } from "../../lib/outbox";
+import { cancelFor, enqueue, flush, getSyncScope, isTmp, newTmpId, onSyncEvent, pendingCount } from "../../lib/outbox";
 import { hoursBetween, hhmm, withSec } from "./format";
 
 const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
-export const cacheKey = (name) => `u${getSyncUserId()}:${name}`;
+export const cacheKey = (name) => `u${getSyncScope()}:${name}`;
 
 /** Totals worked out on the device (same sums the server makes). Falls back to the server's until every team is loaded. */
 export function computeTotals(m) {
   const { day, tabs } = m;
-  if (!day.teams.every((t) => tabs[t.day_team_id])) return { ...day.totals, local: false };
+  if (!day.teams.every((t) => tabs[t.day_team_id]))
+    return day.totals
+      ? { ...day.totals, local: false }
+      : { teams_total: day.teams.length, teams_active: 0, crew: 0, present: 0, budget_paise: day.day_budget_paise || 0, spent_paise: 0, cash_vouchers_paise: sum(day.vouchers || [], (v) => v.amount_paise), local: false };
   let crew = 0, present = 0, spent = 0, active = 0;
   day.teams.forEach((t) => {
     const tab = tabs[t.day_team_id];

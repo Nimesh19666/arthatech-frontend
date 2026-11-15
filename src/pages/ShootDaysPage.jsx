@@ -64,7 +64,7 @@ export default function ShootDaysPage() {
     if (warmed.current.has(id) || !sync.online) return;
     warmed.current.add(id);
     const k = cacheKey(`day:${id}`);
-    shoot.getDay(id).then(async (day) => {
+    shoot.warmDay(id).then(async (day) => {
       if (!(await idb.kvGet(k))) idb.kvSet(k, { day, tabs: {}, members: {} });
     }).catch(() => warmed.current.delete(id));
   };
@@ -94,7 +94,7 @@ export default function ShootDaysPage() {
         <CardsSkeleton count={3} />
       ) : (
         <>
-          {all.length > 0 && (
+          {all.some((d) => d.totals) && (
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
               {[
                 ["Shoot days", all.length],
@@ -152,6 +152,8 @@ export default function ShootDaysPage() {
                     </div>
                     <Badge tone={a.tone}>{a.label}</Badge>
                   </div>
+                  {d.totals && (
+                    <>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                     {[["Teams", `${t.teams_active ?? 0}/${t.teams_total ?? 0}`], ["Crew", t.crew ?? 0], ["Present", t.present ?? 0]].map(([l, v]) => (
                       <div key={l} className="rounded-lg bg-mist/70 py-1.5">
@@ -165,6 +167,8 @@ export default function ShootDaysPage() {
                     <span><span className="text-ink/50">Spent</span> <b>{formatPaiseShort(t.spent_paise ?? 0)}</b></span>
                   </div>
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-mist"><div className={`h-full ${over ? "bg-brand-dark" : "bg-ink"}`} style={{ width: `${pct}%` }} /></div>
+                    </>
+                  )}
                 </Link>
               );
             })}

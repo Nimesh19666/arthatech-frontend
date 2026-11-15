@@ -44,7 +44,7 @@ function PasswordField({ label, error, ...props }) {
   );
 }
 
-// Steps: credentials -> (change password) -> (pick role) -> (email code) -> in
+// Steps: credentials -> (change password) -> (pick house) -> (pick project / role) -> (email code) -> in
 export default function LoginPage() {
   const { status, signIn } = useAuth();
   const navigate = useNavigate();
@@ -54,6 +54,7 @@ export default function LoginPage() {
   const [step, setStep] = useState("credentials");
   const [stage, setStage] = useState(null); // stage_token: memory only, never stored
   const [profiles, setProfiles] = useState([]);
+  const [orgs, setOrgs] = useState([]);
   const [lastId, setLastId] = useState(null);
   const [chosen, setChosen] = useState(null);
   const [emailHint, setEmailHint] = useState("");
@@ -81,6 +82,7 @@ export default function LoginPage() {
     setPassword("");
     setNewPassword("");
     setOtp("");
+    setOrgs([]);
     setError(e || null);
   }
 
@@ -116,9 +118,35 @@ export default function LoginPage() {
     navigate(location.state?.from || "/", { replace: true });
   }
 
-  async function afterStage(stageToken, list, last) {
-    if (list.length === 1) return choose(list[0], stageToken); // only one hat: skip the picker
-    setStep("hat");
+  /** Step 3: the profiles in the chosen house, each with its project's progress */
+  async function pickHouse(h, stageToken) {
+    const res = await authApi.profilesIn(stageToken, h.organisation_id);
+    const list = res.profiles || [];
+    setProfiles(list);
+    // Projects are chosen later, inside the app. Enter with the last used role in this house, else the first.
+    const start = list.find((x) => x.profile_id === lastId) || list[0];
+    if (!start) throw Object.assign(new Error("No access"), { message: "You do not have access to this house." });
+    return choose(start, stageToken);
+  }
+
+  /** Step 2: houses first. A person with one house goes straight to their projects. */
+  async function afterStage(stageToken, list) {
+    let houses;
+    try {
+      houses = (await authApi.organisations(stageToken)).organisations || [];
+    } catch (e) {
+      if (e.status !== 404 && e.status !== 405) throw e;
+      // Server without the house step: use the role list from login
+      setProfiles(list);
+      if (list.length === 1) return choose(list[0], stageToken);
+      setStep("hat");
+      return undefined;
+    }
+    setOrgs(houses);
+    if (houses.length === 0) throw Object.assign(new Error("No access"), { message: "You do not have access to any house." });
+    if (houses.length === 1) return pickHouse(houses[0], stageToken);
+    setStep("house");
+    return undefined;
   }
 
   const submitCredentials = (e) => {
@@ -130,7 +158,7 @@ export default function LoginPage() {
       setLastId(res.last_profile_id ?? null);
       setPassword("");
       if (res.must_change_password) setStep("change");
-      else await afterStage(res.stage_token, res.profiles || [], res.last_profile_id);
+      else await afterStage(res.stage_token, res.profiles || []);
     });
   };
 
@@ -140,7 +168,7 @@ export default function LoginPage() {
       const res = await authApi.changePasswordFirst(stage, newPassword);
       setStage(res.stage_token);
       setNewPassword("");
-      await afterStage(res.stage_token, profiles, lastId);
+      await afterStage(res.stage_token, profiles);
     });
   };
 
@@ -245,6 +273,34 @@ export default function LoginPage() {
             </form>
           )}
 
+          {step === "house" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-3xl font-black tracking-tight">Choose your house</h2>
+                <p className="mt-1 text-sm text-ink/60">Pick the production house you want to work in.</p>
+              </div>
+              <Alert>{error && errorText(error)}</Alert>
+              <div className="space-y-2">
+                {orgs.map((h) => (
+                  <button
+                    key={h.organisation_id ?? "platform"}
+                    disabled={busy}
+                    onClick={() => run(() => pickHouse(h, stage))}
+                    className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-line p-4 text-left transition hover:border-brand hover:bg-brand-light disabled:opacity-50"
+                  >
+                    <span className="min-w-0 break-words font-bold">{h.organisation_name}</span>
+                    <span className="shrink-0 text-sm text-ink/55">
+                      {h.profile_count} {h.profile_count === 1 ? "role" : "roles"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => backToLogin()} className="cursor-pointer text-sm font-semibold text-ink/60 hover:text-brand">
+                ← Use a different account
+              </button>
+            </div>
+          )}
+
           {step === "hat" && (
             <div className="space-y-4">
               <div>
@@ -262,11 +318,9 @@ export default function LoginPage() {
                   >
                     <span>
                       <span className="block font-bold">{p.role_name}</span>
-                      <span className="block text-sm text-ink/55">{p.organisation_name || "Platform"}</span>
+                      <span className="block text-sm text-ink/55">{[p.project_name, p.organisation_name || "Platform"].filter(Boolean).join(" · ")}</span>
                     </span>
-                    {p.profile_id === lastId && (
-                      <span className="rounded-full bg-ink px-2.5 py-0.5 text-xs font-semibold text-white">Last used</span>
-                    )}
+                    {p.profile_id === lastId && <span className="rounded-full bg-ink px-2.5 py-0.5 text-xs font-semibold text-white">Last used</span>}
                   </button>
                 ))}
               </div>
@@ -310,7 +364,7 @@ export default function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => (profiles.length > 1 ? (setError(null), setStep("hat")) : backToLogin())}
+                  onClick={() => (orgs.length > 1 ? (setError(null), setStep("house")) : profiles.length > 1 && orgs.length === 0 ? (setError(null), setStep("hat")) : backToLogin())}
                   className="cursor-pointer font-semibold text-ink/60 hover:text-brand"
                 >
                   Back
