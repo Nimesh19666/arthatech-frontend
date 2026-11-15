@@ -21,12 +21,18 @@ const MESSAGES = {
   network_error: "Cannot reach the server. Check your connection.",
 };
 
+const first = (v) => (Array.isArray(v) ? first(v[0]) : v && typeof v === "object" ? first(Object.values(v)[0]) : v == null ? "" : String(v));
+
 const hasFields = (e) => e && e.fields && Object.keys(e.fields).length > 0;
 
 export function errorText(e) {
   if (!e) return "";
   if (e.code === "validation_error") {
     // Field errors are shown under each input. Without fields, show the server text.
+    if (e.fields?.detail) return first(e.fields.detail); // a rule that is not about one input
+    // Errors keyed by list position (a bad scene code) have no input of their own: say them here
+    const nested = Object.entries(e.fields || {}).find(([, v]) => v && typeof v === "object" && !Array.isArray(v));
+    if (nested) return first(nested[1]);
     return hasFields(e) ? "Please fix the highlighted fields." : e.message || "Invalid data.";
   }
   // Unknown codes (for example "delete blocked" 400s) show the server's plain text.

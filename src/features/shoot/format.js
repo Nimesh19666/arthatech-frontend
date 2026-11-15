@@ -24,11 +24,18 @@ export function fmtHours(h) {
 }
 
 export const AUDIT = {
-  pending: { label: "Pending", tone: "neutral" },
-  query_raised: { label: "Query raised", tone: "red" },
-  verified: { label: "Verified", tone: "dark" },
+  draft: { label: "Draft", tone: "neutral" },
+  submitted: { label: "Submitted", tone: "dark" },
+  recheck: { label: "Recheck", tone: "red" },
+  approved: { label: "Approved", tone: "dark" },
+  rejected: { label: "Rejected", tone: "red" },
 };
+/** Only these can be edited. Everything else is locked. */
+export const EDITABLE = ["draft", "recheck"];
+export const isEditable = (status) => !status || EDITABLE.includes(status);
 export const PAY_MODES = [
   { value: "cash_voucher", label: "Cash voucher" },
+  { value: "vendor_bill", label: "Vendor bill" },
   { value: "online", label: "Online" },
+  { value: "credit", label: "Credit" },
 ];

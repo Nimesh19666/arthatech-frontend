@@ -35,15 +35,16 @@ export default function ProjectCard({ p, last, current, busy, onPick }) {
           </span>
           )}
           <span className="mt-3 block h-2 overflow-hidden rounded-full bg-mist">
-            <span className="block h-full rounded-full bg-brand" style={{ width: `${g.verified_percent}%` }} />
+            <span className="block h-full rounded-full bg-brand" style={{ width: `${g.approved_percent ?? 0}%` }} />
           </span>
           <span className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 text-xs">
             <span className="font-semibold">
-              {g.shoot_days_total === 0 ? "No shoot days yet" : `${g.shoot_days_verified} of ${g.shoot_days_total} days verified (${g.verified_percent}%)`}
+              {g.shoot_days_total === 0 ? "No shoot days yet" : `${g.shoot_days_approved ?? 0} of ${g.shoot_days_total} days approved (${g.approved_percent ?? 0}%)`}
             </span>
             {g.shoot_days_total > 0 && (
-              <span className="text-ink/55">
-                {g.shoot_days_pending} to audit{g.shoot_days_query_raised > 0 ? ` · ${g.shoot_days_query_raised} query` : ""}
+              <span className="flex flex-wrap gap-1.5">
+                {g.shoot_days_submitted > 0 && <span className="rounded-full bg-ink px-2 py-0.5 font-semibold text-white">{g.shoot_days_submitted} waiting</span>}
+                {g.shoot_days_recheck > 0 && <span className="rounded-full bg-brand-light px-2 py-0.5 font-semibold text-brand-dark">{g.shoot_days_recheck} to fix</span>}
               </span>
             )}
           </span>

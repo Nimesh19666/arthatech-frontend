@@ -4,7 +4,7 @@ import { rupeesInWords } from "../../lib/money.js";
 const LABEL = "cell-label mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-ink/45";
 
 /** A small labelled input that saves when you leave it (not on every key). */
-export function Cell({ label, value, onSave, type = "text", disabled = false, className = "", placeholder, min, hint }) {
+export function Cell({ label, value, onSave, type = "text", disabled = false, className = "", placeholder, min, hint, noIcon }) {
   const [v, setV] = useState(value ?? "");
   const [focus, setFocus] = useState(false);
   useEffect(() => {
@@ -30,7 +30,7 @@ export function Cell({ label, value, onSave, type = "text", disabled = false, cl
         onChange={(e) => setV(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        className={`input !py-1.5 text-sm disabled:opacity-60 ${type === "time" ? "!px-2" : ""}`}
+        className={`input !py-1.5 text-sm disabled:opacity-60 ${type === "time" ? "!px-2" : ""} ${noIcon ? "[&::-webkit-calendar-picker-indicator]:hidden" : ""}`}
       />
       {hint && <span className="mt-0.5 block text-[11px] font-semibold text-ink/55">{hint}</span>}
       {type === "number" && /₹/.test(label) && v !== "" && <span className="cell-hint mt-0.5 block text-[11px] font-medium text-ink/50">{rupeesInWords(v)}</span>}

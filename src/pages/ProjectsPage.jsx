@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as authApi from "../api/auth";
+import * as idb from "../lib/idb";
 import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
 import ProjectCard from "../features/auth/ProjectCard.jsx";
@@ -18,14 +19,14 @@ export default function ProjectsPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // The login screen already received every role in this house with its progress: use that copy
     let alive = true;
-    authApi
-      .myProjects()
-      .then((r) => alive && setList(r.profiles || r.projects || (Array.isArray(r) ? r : [])))
-      .catch(() => {
-        // Backend has no project list with progress yet: use the roles this login already knows
-        if (alive) setList([profile, ...otherProfiles].filter((p) => p && p.organisation_id === profile?.organisation_id && p.project_id));
-      });
+    (async () => {
+      const saved = await idb.kvGet(`house-profiles:${profile?.organisation_id}`).catch(() => null);
+      const known = [profile, ...otherProfiles].filter((p) => p && p.organisation_id === profile?.organisation_id && p.project_id);
+      const byId = new Map((saved || []).map((p) => [p.profile_id, p]));
+      if (alive) setList(known.map((p) => (byId.get(p.profile_id)?.progress ? { ...p, progress: byId.get(p.profile_id).progress } : p)));
+    })();
     return () => {
       alive = false;
     };
@@ -43,7 +44,7 @@ export default function ProjectsPage() {
         const proj = null; // GET /projects/<id> is not allowed for this role
         const n = (s) => days.filter((d) => d.audit_status === s).length;
         const total = days.length;
-        const verified = n("verified");
+        const approved = n("approved");
         const dates = days.map((d) => d.shoot_date).filter(Boolean).sort();
         if (alive)
           setMine({
@@ -54,10 +55,10 @@ export default function ProjectsPage() {
               start_date: proj?.start_date,
               end_date: proj?.end_date,
               shoot_days_total: total,
-              shoot_days_verified: verified,
-              shoot_days_pending: n("pending"),
-              shoot_days_query_raised: n("query_raised"),
-              verified_percent: total ? Math.round((verified / total) * 100) : 0,
+              shoot_days_approved: approved,
+              shoot_days_submitted: n("submitted"),
+              shoot_days_recheck: n("recheck"),
+              approved_percent: total ? Math.round((approved / total) * 100) : 0,
               last_shoot_date: dates[dates.length - 1],
             },
           });

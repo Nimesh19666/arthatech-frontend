@@ -32,7 +32,9 @@ export const getDay = (id) => {
   return api(`/shoot-days/${id}`);
 };
 export const deleteDay = (id) => api(`/shoot-days/${id}`, { method: "DELETE" });
-export const signoff = (id, body) => api(`/shoot-days/${id}/audit`, { method: "POST", body });
+export const reviewers = (id) => api(`/shoot-days/${id}/reviewers`);
+export const submitDay = (id, body) => api(`/shoot-days/${id}/submit`, { method: "POST", body });
+export const reviewDay = (id, body) => api(`/shoot-days/${id}/review`, { method: "POST", body });
 
 export const getTab = (dayTeamId) => api(`/day-teams/${dayTeamId}`);
 // These two need small backend additions (POST /shoot-days/<id>/teams, DELETE /day-teams/<id>)

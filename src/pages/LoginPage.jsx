@@ -1,3 +1,4 @@
+import * as idb from "../lib/idb";
 import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import * as authApi from "../api/auth";
@@ -123,6 +124,7 @@ export default function LoginPage() {
     const res = await authApi.profilesIn(stageToken, h.organisation_id);
     const list = res.profiles || [];
     setProfiles(list);
+    idb.kvSet(`house-profiles:${h.organisation_id}`, list).catch(() => {});
     // Projects are chosen later, inside the app. Enter with the last used role in this house, else the first.
     const start = list.find((x) => x.profile_id === lastId) || list[0];
     if (!start) throw Object.assign(new Error("No access"), { message: "You do not have access to this house." });

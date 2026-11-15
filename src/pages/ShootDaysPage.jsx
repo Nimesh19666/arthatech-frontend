@@ -113,7 +113,7 @@ export default function ShootDaysPage() {
 
           {all.length > 0 && (
             <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filter days by audit status">
-              {[["all", "All", all.length], ["pending", "To audit", count("pending")], ["query_raised", "Queries", count("query_raised")], ["verified", "Verified", count("verified")]].map(([k, l, n]) => (
+              {[["all", "All", all.length], ["draft", "Draft", count("draft")], ["submitted", "Submitted", count("submitted")], ["recheck", "Recheck", count("recheck")], ["approved", "Approved", count("approved")], ...(count("rejected") ? [["rejected", "Rejected", count("rejected")]] : [])].map(([k, l, n]) => (
                 <button
                   key={k}
                   role="tab"
@@ -139,11 +139,11 @@ export default function ShootDaysPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {list.map((d) => {
               const t = d.totals || {};
-              const a = AUDIT[d.audit_status] || AUDIT.pending;
+              const a = AUDIT[d.audit_status] || AUDIT.draft;
               const pct = t.budget_paise ? Math.min(100, (t.spent_paise / t.budget_paise) * 100) : 0;
               const over = t.budget_paise > 0 && t.spent_paise > t.budget_paise;
               return (
-                <Link key={d.id} to={`/shoot-days/${d.id}`} onMouseEnter={() => warm(d.id)} onTouchStart={() => warm(d.id)} onFocus={() => warm(d.id)} className={`block rounded-2xl border bg-white p-4 transition hover:border-ink hover:shadow-sm ${d.audit_status === "query_raised" ? "border-brand/50" : "border-line"}`}>
+                <Link key={d.id} to={`/shoot-days/${d.id}`} onMouseEnter={() => warm(d.id)} onTouchStart={() => warm(d.id)} onFocus={() => warm(d.id)} className={`block rounded-2xl border bg-white p-4 transition hover:border-ink hover:shadow-sm ${d.audit_status === "recheck" ? "border-brand/50" : "border-line"}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-xl font-black">Shoot Day {d.day_no}</p>

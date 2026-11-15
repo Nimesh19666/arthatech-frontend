@@ -41,8 +41,8 @@ function Head({ cols, labels }) {
 
 const PEOPLE_COLS = "@3xl:grid-cols-[minmax(0,1.3fr)_8rem_8rem_4.5rem_6.5rem_5rem_minmax(0,1.1fr)_3rem_2rem]";
 const PEOPLE_HEAD = ["Name", "In", "Out", "Hours", "Status", "Paid ₹", "Remarks", "Signed"];
-const VEH_COLS = "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_8rem_4.5rem_4.5rem_5.5rem_2rem]";
-const VEH_HEAD = ["Vehicle no.", "Type", "Vendor", "Driver", "Report", "Start km", "End km", "Amount ₹"];
+const VEH_COLS = "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_5.75rem_5.75rem_5rem_5rem_5.5rem_2rem]";
+const VEH_HEAD = ["Vehicle no.", "Type", "Vendor", "Driver", "Report", "Pack-up", "Start km", "End km", "Amount ₹"];
 const EXP_COLS = "@3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_4.5rem_6rem_9.5rem_minmax(0,1fr)_3.5rem_2rem]";
 const EXP_HEAD = ["Item", "Vendor", "Qty", "Amount ₹", "Paid by", "Remarks", "Bill"];
 
@@ -216,7 +216,8 @@ export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTea
                       <Cell label="Type" disabled={off} value={v.vehicle_type} onSave={(x) => sd.editVehicle(dt, v.id, { vehicle_type: x })} />
                       <Cell label="Vendor" disabled={off} value={v.vendor} onSave={(x) => sd.editVehicle(dt, v.id, { vendor: x })} />
                       <Cell label="Driver" disabled={off} value={v.driver} onSave={(x) => sd.editVehicle(dt, v.id, { driver: x })} />
-                      <Cell label="Report time" type="time" disabled={off} value={hhmm(v.report_time)} onSave={(x) => sd.editVehicle(dt, v.id, { report_time: x })} />
+                      <Cell noIcon label="Report time" type="time" disabled={off} value={hhmm(v.report_time)} onSave={(x) => sd.editVehicle(dt, v.id, { report_time: x })} />
+                      <Cell noIcon label="Pack-up time" type="time" disabled={off} value={hhmm(v.packup_time)} onSave={(x) => sd.editVehicle(dt, v.id, { packup_time: x })} />
                       <Cell label="Start km" type="number" min="0" disabled={off} value={v.km_start ?? ""} onSave={(x) => sd.editVehicle(dt, v.id, { km_start: x === "" ? null : Number(x) })} />
                       <Cell label="End km" type="number" min="0" disabled={off} value={v.km_end ?? ""} onSave={(x) => sd.editVehicle(dt, v.id, { km_end: x === "" ? null : Number(x) })} />
                       <Cell label="Amount (₹)" type="number" min="0" disabled={off} value={paiseToRupees(v.amount_paise)} onSave={(x) => sd.editVehicle(dt, v.id, { amount_paise: rupees(x) })} />
@@ -328,7 +329,7 @@ export function TeamList({ rows, tabs, selected, onSelect }) {
               <span className="min-w-0 flex-1">
                 <span className="block break-words text-sm font-bold leading-tight">{r.name}</span>
                 <span className={`block text-xs ${on ? "text-white/80" : "text-ink/50"}`}>
-                  {!tab ? (r.declared_headcount != null ? `expected ${r.declared_headcount}` : "tap to open") : crew ? `${present} / ${tab.entries.length} present${tab.declared_headcount != null ? ` · exp ${tab.declared_headcount}` : ""}` : `${tab.vehicles.length} vehicle{tab.vehicles.length === 1 ? "" : "s"}`}
+                  {!tab ? (r.declared_headcount != null ? `expected ${r.declared_headcount}` : "tap to open") : crew ? `${present} / ${tab.entries.length} present${tab.declared_headcount != null ? ` · exp ${tab.declared_headcount}` : ""}` : `${tab.vehicles.length} vehicle${tab.vehicles.length === 1 ? "" : "s"}`}
                   {spent > 0 ? ` · ${formatPaise(spent)}` : ""}
                 </span>
               </span>

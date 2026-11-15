@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as shoot from "../../api/shoot";
 import * as idb from "../../lib/idb";
 import { cancelFor, enqueue, flush, getSyncScope, isTmp, newTmpId, onSyncEvent, pendingCount } from "../../lib/outbox";
-import { hoursBetween, hhmm, withSec } from "./format";
+import { hoursBetween, hhmm, isEditable, withSec } from "./format";
 
 const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 export const cacheKey = (name) => `u${getSyncScope()}:${name}`;
@@ -181,13 +181,13 @@ export function useShootDay(dayId) {
     };
   }, [dayId, commit, load]);
 
-  const locked = !model || model.day.audit_status === "verified";
+  const locked = !model || !isEditable(model.day.audit_status);
 
   /** apply() changes a copy of the data; op is the request to send. */
   const mutate = useCallback(
     (apply, op) => {
       const m = ref.current;
-      if (!m || m.day.audit_status === "verified") return;
+      if (!m || !isEditable(m.day.audit_status)) return;
       const next = structuredClone(m);
       apply(next);
       commit(next);
@@ -277,7 +277,7 @@ export function useShootDay(dayId) {
       const tmp = newTmpId();
       mutate(
         (m) => {
-          m.tabs[dtId].vehicles.push({ id: tmp, vehicle_no: "", vehicle_type: "", vendor: "", driver: "", report_time: null, km_start: null, km_end: null, amount_paise: 0, ...body });
+          m.tabs[dtId].vehicles.push({ id: tmp, vehicle_no: "", vehicle_type: "", vendor: "", driver: "", report_time: null, packup_time: null, km_start: null, km_end: null, amount_paise: 0, ...body });
         },
         { method: "POST", path: `/day-teams/${dtId}/vehicles`, body, label: "New vehicle", tmp }
       );

@@ -5,7 +5,7 @@ import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
 import { Cell, SceneChips, TimeRange } from "../features/shoot/Cell.jsx";
 import TeamSection, { TeamList } from "../features/shoot/TeamSection.jsx";
-import { AUDIT, fdate, hhmm, paiseToRupees } from "../features/shoot/format";
+import { AUDIT, fdate, hhmm, isEditable, paiseToRupees } from "../features/shoot/format";
 import { cacheKey, computeTotals, useShootDay } from "../features/shoot/useShootDay";
 import { Alert, Badge, Button, Field } from "../components/ui.jsx";
 import FormModal from "../components/FormModal.jsx";
@@ -68,7 +68,8 @@ export default function ShootDayPage() {
   const [sel, setSel] = useState(null); // team chosen in the Teams step
   const [onlyActive, setOnlyActive] = useState(false);
   const [modal, setModal] = useState(null);
-  const [status, setStatus] = useState("pending");
+  const [reviewers, setReviewers] = useState(null); // Head Auditors who can review this day
+  const [reviewerId, setReviewerId] = useState("");
   const [note, setNote] = useState("");
   const [signErr, setSignErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -115,12 +116,23 @@ export default function ShootDayPage() {
     const i = s.findIndex((d) => String(d.id) === String(dayId));
     return { prev: i > 0 ? s[i - 1] : null, next: i >= 0 && i < s.length - 1 ? s[i + 1] : null };
   }, [siblings, dayId]);
+  // The comment box starts empty after every change of status
   useEffect(() => {
-    if (day) {
-      setStatus(day.audit_status);
-      setNote(day.audit_note || "");
-    }
-  }, [day?.audit_status, day?.audit_note]); // eslint-disable-line react-hooks/exhaustive-deps
+    setNote("");
+    setSignErr(null);
+  }, [day?.audit_status]);
+  // Head Auditors to pick from, only needed while the day can be submitted
+  useEffect(() => {
+    if (step !== "check" || !day || !isEditable(day.audit_status) || !can("shoot_day.signoff") || offline) return undefined;
+    let alive = true;
+    shoot
+      .reviewers(dayId)
+      .then((r) => alive && (setReviewers(Array.isArray(r) ? r : []), setReviewerId((cur) => cur || String((Array.isArray(r) && r[0]?.profile_id) ?? ""))))
+      .catch(() => alive && setReviewers([]));
+    return () => {
+      alive = false;
+    };
+  }, [step, dayId, day?.audit_status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!model) {
     return state.error ? (
@@ -143,13 +155,20 @@ export default function ShootDayPage() {
     );
   }
 
-  const verified = day.audit_status === "verified";
-  const canEdit = can("shoot_day.edit") && !verified;
+  const status = day.audit_status;
+  const editable = isEditable(status);
+  const canEdit = can("shoot_day.edit") && editable;
   const canSign = can("shoot_day.signoff");
+  const myProfileId = me?.profile?.profile_id;
+  const canDecide = status === "submitted" && can("shoot_day.review") && day.reviewer_id != null && day.reviewer_id === myProfileId;
+  const history = day.review_history || [];
+  const lastReview = [...history].reverse().find((h) => h.to === "submitted");
+  const waitingFor = lastReview?.reviewer?.name || "the Head Auditor";
+  const lastDecision = [...history].reverse().find((h) => ["approved", "rejected"].includes(h.to));
   const totals = computeTotals(model);
   const pct = totals.budget_paise ? Math.min(100, (totals.spent_paise / totals.budget_paise) * 100) : 0;
   const over = totals.budget_paise > 0 && totals.spent_paise > totals.budget_paise;
-  const a = AUDIT[day.audit_status] || AUDIT.pending;
+  const a = AUDIT[status] || AUDIT.draft;
 
   const rows = day.teams.filter((r) => {
     if (!onlyActive) return true;
@@ -180,22 +199,32 @@ export default function ShootDayPage() {
     });
   }
 
-  async function saveSignoff() {
+  /** Submit for review, or approve / reject / recheck. After any failure the day is reloaded: someone may have changed it. */
+  async function act(kind) {
     setSignErr(null);
-    if (status === "query_raised" && !note.trim()) return setSignErr("Write what the query is.");
-    if (status === "verified") {
-      const ok = await confirm({ title: "Verify this day?", message: "This locks the whole day. Nobody can edit it until you reopen it.", confirmLabel: "Verify" });
+    const text = note.trim();
+    if (kind === "submit") {
+      if (!reviewerId) return setSignErr("Choose a Head Auditor.");
+      const ok = await confirm({ title: "Submit this day?", message: "It will be locked until the Head Auditor approves it or sends it back.", confirmLabel: "Submit" });
+      if (!ok) return;
+    } else if ((kind === "reject" || kind === "recheck") && !text) {
+      return setSignErr("Write a comment for reject or recheck.");
+    } else if (kind === "approve") {
+      const ok = await confirm({ title: "Approve this day?", message: "It will be locked for everyone.", confirmLabel: "Approve" });
       if (!ok) return;
     }
     await online(async () => {
       try {
-        await shoot.signoff(dayId, { status, ...(note.trim() ? { note: note.trim() } : {}) });
+        if (kind === "submit") await shoot.submitDay(dayId, { reviewer_profile_id: Number(reviewerId), ...(text ? { comment: text } : {}) });
+        else await shoot.reviewDay(dayId, { action: kind, ...(text ? { comment: text } : {}) });
       } catch (e) {
         setSignErr(errorText(e));
+        if (e.status === 400) await sd.reload({ silent: true });
         throw e;
       }
+      setNote("");
       await sd.reload({ silent: true });
-    }, "Saved");
+    }, kind === "submit" ? "Submitted for review" : kind === "approve" ? "Approved" : kind === "reject" ? "Rejected" : "Sent back for recheck");
   }
 
   const money = Boolean(day.totals);
@@ -245,7 +274,7 @@ export default function ShootDayPage() {
     { key: "vouchers", title: "Cash vouchers", sub: `${vouchers.length} added`, help: "One row per cash voucher: reference, person, department, narration and amount.", done: vouchers.length > 0 },
     { key: "crew", title: "Crew count", sub: `${crewDocketTotal} expected`, help: "Type the expected headcount for each team. The app compares it with the people you add next.", done: crewRows.length > 0 && countUnset.length === 0 },
     { key: "teams", title: "Teams", sub: `${crewCount} people`, help: "For each team: who came, in and out time, signed or not. Then vehicles and expenses.", done: crewCount > 0 },
-    { key: "check", title: canSign ? "Check and sign off" : "Check", sub: attention.length ? `${attention.length} to look at` : a.label, help: "See what does not add up, then verify the day or raise a query.", done: verified },
+    { key: "check", title: canSign ? "Check and sign off" : "Check", sub: attention.length ? `${attention.length} to look at` : a.label, help: "See what does not add up, then submit the day to a Head Auditor.", done: status === "approved" },
   ];
   const idx = steps.findIndex((x) => x.key === step);
   const cur = steps[idx] || steps[0];
@@ -281,7 +310,14 @@ export default function ShootDayPage() {
       </div>
 
       {state.source === "cache" && <Alert tone="info">Showing the copy saved on this device. It will refresh when you are back online.</Alert>}
-      {verified && <Alert tone="info">This day is verified and locked. Reopen it to make changes.</Alert>}
+      {status === "recheck" && day.audit_note && (
+        <Alert tone="error">
+          <b>Sent back for recheck:</b> {day.audit_note}
+        </Alert>
+      )}
+      {status === "submitted" && <Alert tone="info">This day is submitted and locked while {canDecide ? "you review" : waitingFor + " reviews"} it.</Alert>}
+      {status === "approved" && <Alert tone="info">This day is approved and locked.</Alert>}
+      {status === "rejected" && <Alert tone="info">This day is rejected and locked.</Alert>}
 
       {/* Steps, in the order the paper is filled */}
       <nav className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" aria-label="Audit steps">
@@ -453,23 +489,80 @@ export default function ShootDayPage() {
             </ul>
           </section>
 
-          {canSign && (
-            <Panel title="Auditor sign-off">
+          {canSign && editable && (
+            <Panel title="Submit for review">
               <div className="space-y-3 p-4">
                 <Alert>{signErr}</Alert>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Status" as="select" value={status} onChange={(e) => setStatus(e.target.value)}>
-                    <option value="pending">Pending</option>
-                    <option value="query_raised">Query raised</option>
-                    <option value="verified">Verified</option>
-                  </Field>
-                  <Field className="sm:col-span-2" label="Auditor notes" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Mismatches, missing vouchers, follow-ups" />
-                </div>
+                {reviewers && reviewers.length === 0 ? (
+                  <p className="text-sm font-semibold text-ink/60">No Head Auditor on this project yet.</p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="Head Auditor" as="select" value={reviewerId} onChange={(e) => setReviewerId(e.target.value)}>
+                      {!reviewers && <option value="">Loading…</option>}
+                      {(reviewers || []).map((r) => (
+                        <option key={r.profile_id} value={r.profile_id}>{r.name}</option>
+                      ))}
+                    </Field>
+                    <Field className="sm:col-span-2" label="Comment (optional)" maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything the Head Auditor should look at" />
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-3">
-                  <Button loading={busy} disabled={offline || sync.pending > 0} onClick={saveSignoff}>{verified && status === "pending" ? "Reopen day" : "Save sign-off"}</Button>
-                  {(offline || sync.pending > 0) && <span className="text-xs text-ink/55">{offline ? "Sign-off needs internet." : "Wait for your changes to finish saving first."}</span>}
+                  <Button loading={busy} disabled={offline || sync.pending > 0 || !reviewerId || !reviewers?.length} onClick={() => act("submit")}>Submit for review</Button>
+                  {(offline || sync.pending > 0) && <span className="text-xs text-ink/55">{offline ? "Submitting needs internet." : "Wait for your changes to finish saving first."}</span>}
                 </div>
               </div>
+            </Panel>
+          )}
+
+          {status === "submitted" && !canDecide && (
+            <Panel title="Waiting for review">
+              <p className="p-4 text-sm">Waiting for <b>{waitingFor}</b> to approve this day, send it back, or reject it.</p>
+            </Panel>
+          )}
+
+          {canDecide && (
+            <Panel title="Review this day">
+              <div className="space-y-3 p-4">
+                <Alert>{signErr}</Alert>
+                {lastReview?.comment && <p className="rounded-lg bg-mist/70 p-3 text-sm"><b>{lastReview.by?.name || "Auditor"}:</b> {lastReview.comment}</p>}
+                <Field label="Comment (needed for reject and recheck)" maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What is wrong, or what to fix" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button loading={busy} disabled={offline} onClick={() => act("approve")}>Approve</Button>
+                  <Button variant="outline" disabled={busy || offline} onClick={() => act("recheck")}>Send for recheck</Button>
+                  <Button variant="danger" disabled={busy || offline} onClick={() => act("reject")}>Reject</Button>
+                  {offline && <span className="text-xs text-ink/55">Reviewing needs internet.</span>}
+                </div>
+              </div>
+            </Panel>
+          )}
+
+          {(status === "approved" || status === "rejected") && (
+            <Panel title={status === "approved" ? "Approved" : "Rejected"}>
+              <p className="p-4 text-sm">
+                {status === "approved" ? "Approved" : "Rejected"} by <b>{lastDecision?.by?.name || "the Head Auditor"}</b>
+                {(lastDecision?.at || day.verified_at) && <> on {new Date(lastDecision?.at || day.verified_at).toLocaleString()}</>}
+                {lastDecision?.comment ? <>. Reason: {lastDecision.comment}</> : "."}
+              </p>
+            </Panel>
+          )}
+
+          {history.length > 0 && (
+            <Panel title="Review history">
+              <ol className="space-y-3 p-4">
+                {history.map((h, i) => (
+                  <li key={i} className="flex gap-3 text-sm">
+                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-brand" />
+                    <div className="min-w-0">
+                      <p>
+                        <b>{h.by?.name || "Someone"}</b> <span className="text-ink/60">{({ submitted: "submitted it", recheck: "sent it back for recheck", approved: "approved it", rejected: "rejected it" })[h.to] || `moved it to ${h.to}`}</span>
+                        {h.to === "submitted" && h.reviewer?.name ? <span className="text-ink/60"> to <b className="text-ink">{h.reviewer.name}</b></span> : null}
+                      </p>
+                      {h.comment && <p className="mt-0.5 break-words text-ink/80">“{h.comment}”</p>}
+                      {h.at && <p className="mt-0.5 text-xs text-ink/45">{new Date(h.at).toLocaleString()}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ol>
             </Panel>
           )}
         </>
@@ -480,7 +573,7 @@ export default function ShootDayPage() {
         <div>{idx < steps.length - 1 && <Button onClick={() => setStep(steps[idx + 1].key)}>Next: {steps[idx + 1].title} →</Button>}</div>
       </div>
 
-      {step === "details" && can("shoot_day.edit") && !verified && (
+      {step === "details" && can("shoot_day.edit") && editable && history.length === 0 && (
         <div className="flex justify-end">
           <Button variant="danger" disabled={offline} onClick={async () => {
             const ok = await confirm({ title: "Delete this shoot day?", message: "All its attendance, expenses and vouchers will be removed.", confirmLabel: "Delete" });
