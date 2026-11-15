@@ -60,3 +60,76 @@ export function Tick({ label, checked, onSave, disabled = false }) {
     </label>
   );
 }
+
+const SCENE_OK = /^[A-Za-z0-9]{1,10}$/;
+/** Old data may still be one text like "10, 20 D2": read it as a list */
+export const asScenes = (v) => (Array.isArray(v) ? v : String(v || "").split(/[,\s]+/).filter(Boolean));
+
+/** Scene numbers as chips. Type one and press Enter, comma or space; paste many at once. */
+export function SceneChips({ label, value, onSave, disabled = false, className = "" }) {
+  const list = asScenes(value).map((s) => String(s).toUpperCase());
+  const [text, setText] = useState("");
+  const [err, setErr] = useState("");
+  const [focus, setFocus] = useState(false);
+
+  function add(raw) {
+    const parts = raw.split(/[,\s]+/).filter(Boolean);
+    if (!parts.length) return setText("");
+    const bad = parts.find((p) => !SCENE_OK.test(p));
+    if (bad) {
+      setErr(`"${bad.slice(0, 14)}" is not a scene number. Use letters and numbers only, up to 10 characters (e.g. 12A, D2).`);
+      return;
+    }
+    const next = [...new Set([...list, ...parts.map((p) => p.toUpperCase())])];
+    setErr("");
+    setText("");
+    if (next.length > 200) return setErr("Up to 200 scenes.");
+    if (next.length !== list.length) onSave(next);
+  }
+  const remove = (s) => onSave(list.filter((x) => x !== s));
+
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <span className={LABEL}>{label}</span>
+      <div className={`flex min-h-[34px] flex-wrap items-center gap-1 rounded-lg border bg-white px-2 py-[3px] ${err ? "border-brand" : "border-line"} focus-within:border-ink focus-within:ring-2 focus-within:ring-brand/20`}>
+        {list.map((s) => (
+          <span key={s} className="inline-flex items-center gap-1 rounded-full bg-brand-light px-2 py-0.5 text-xs font-bold text-brand-dark">
+            {s}
+            {!disabled && (
+              <button type="button" aria-label={`Remove scene ${s}`} onClick={() => remove(s)} className="cursor-pointer text-brand-dark/60 hover:text-brand-dark">
+                ✕
+              </button>
+            )}
+          </span>
+        ))}
+        {!disabled && (
+          <input
+            value={text}
+            maxLength={40}
+            placeholder={list.length ? "Add" : "10, 12A, D2"}
+            aria-label={`${label}: add a scene number`}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (/[,\s]$/.test(v) && v.trim()) add(v);
+              else {
+                setText(v);
+                setErr("");
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add(text);
+              } else if (e.key === "Backspace" && !text && list.length) remove(list[list.length - 1]);
+            }}
+            onFocus={() => setFocus(true)}
+            onBlur={() => { setFocus(false); text.trim() && add(text); }}
+            className="min-w-[4rem] flex-1 bg-transparent px-1 py-0.5 text-sm outline-none placeholder:text-ink/35"
+          />
+        )}
+        {disabled && list.length === 0 && <span className="px-1 text-sm text-ink/40">None</span>}
+      </div>
+      {err ? <span className="mt-0.5 block text-[11px] font-medium text-brand">{err}</span> : null}
+    </div>
+  );
+}

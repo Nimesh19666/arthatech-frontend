@@ -3,7 +3,7 @@ import * as idb from "../lib/idb";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
-import { Cell } from "../features/shoot/Cell.jsx";
+import { Cell, SceneChips } from "../features/shoot/Cell.jsx";
 import TeamSection, { TeamList } from "../features/shoot/TeamSection.jsx";
 import { AUDIT, fdate, hhmm, paiseToRupees } from "../features/shoot/format";
 import { cacheKey, computeTotals, useShootDay } from "../features/shoot/useShootDay";
@@ -310,12 +310,17 @@ export default function ShootDayPage() {
           <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
             {[
               ["Date", "shoot_date", "date"], ["Shoot location", "location"], ["Script location", "script_location"], ["Shift", "shift"],
-              ["Call time", "call_time", "time"], ["Roll time", "roll_time", "time"], ["Pack-up", "packup_time", "time"], ["Scenes planned", "scenes_planned"],
-              ["Scenes executed", "scenes_executed"], ["Director", "director"], ["DOP", "dop"], ["Production designer", "production_designer"],
+              ["Call time", "call_time", "time"], ["Roll time", "roll_time", "time"], ["Pack-up", "packup_time", "time"], ["@scenes_planned"], ["@scenes_executed"], ["Director", "director"], ["DOP", "dop"], ["Production designer", "production_designer"],
               ["Associate producer", "associate_producer"], ["Line producer", "line_producer"], ["Auditor(s)", "auditors"],
-            ].map(([label, key, type]) => (
+            ].map(([label, key, type]) =>
+              label === "@scenes_planned" ? (
+                <SceneChips key={label} label="Scenes planned" disabled={!canEdit} value={day.scenes_planned} onSave={(v) => sd.editDay({ scenes_planned: v })} />
+              ) : label === "@scenes_executed" ? (
+                <SceneChips key={label} label="Scenes executed" disabled={!canEdit} value={day.scenes_executed} onSave={(v) => sd.editDay({ scenes_executed: v })} />
+              ) : (
               <Cell key={key} label={label} type={type || "text"} disabled={!canEdit} value={type === "time" ? hhmm(day[key]) : day[key] ?? ""} onSave={(v) => sd.editDay({ [key]: v })} />
-            ))}
+              )
+            )}
             <Cell label="Budget for the day (₹)" type="number" min="0" disabled={!canEdit} value={paiseToRupees(day.day_budget_paise)} onSave={(v) => sd.editDay({ day_budget_paise: rupees(v) })} />
           </div>
         </Panel>
