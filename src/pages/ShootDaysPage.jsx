@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
-import { AUDIT, fdate } from "../features/shoot/format";
+import { AUDIT, fdate, hhmm } from "../features/shoot/format";
 import { cacheKey } from "../features/shoot/useShootDay";
 import { Alert, Badge, Button } from "../components/ui.jsx";
 import FormModal from "../components/FormModal.jsx";
@@ -147,7 +147,7 @@ export default function ShootDaysPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-xl font-black">Shoot Day {d.day_no}</p>
-                      <p className="font-mono text-xs text-ink/55">{fdate(d.shoot_date)}{d.shift ? ` · ${d.shift}` : ""}</p>
+                      <p className="font-mono text-xs text-ink/55">{fdate(d.shoot_date)}{d.shift_in_time && d.shift_out_time ? ` · ${hhmm(d.shift_in_time)}–${hhmm(d.shift_out_time)}` : ""}</p>
                       <p className="mt-0.5 truncate text-sm text-ink/60">{d.location || "Location not set"}</p>
                     </div>
                     <Badge tone={a.tone}>{a.label}</Badge>

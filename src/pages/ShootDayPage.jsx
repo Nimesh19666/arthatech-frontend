@@ -3,7 +3,7 @@ import * as idb from "../lib/idb";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
-import { Cell, SceneChips } from "../features/shoot/Cell.jsx";
+import { Cell, SceneChips, TimeRange } from "../features/shoot/Cell.jsx";
 import TeamSection, { TeamList } from "../features/shoot/TeamSection.jsx";
 import { AUDIT, fdate, hhmm, paiseToRupees } from "../features/shoot/format";
 import { cacheKey, computeTotals, useShootDay } from "../features/shoot/useShootDay";
@@ -39,6 +39,17 @@ function Panel({ title, right, fold, hint, children }) {
       {children}
     </section>
   );
+}
+
+/** Shift length from the two times. Out earlier than in means it ends next morning (night shift). */
+function shiftHint(day) {
+  const a = hhmm(day.shift_in_time), b = hhmm(day.shift_out_time);
+  if (!a || !b) return null;
+  const m = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  let d = m(b) - m(a);
+  if (d < 0) d += 1440;
+  if (d === 0) return null;
+  return `${Math.floor(d / 60)}h ${String(d % 60).padStart(2, "0")}m shift${m(b) < m(a) ? " (night, ends next day)" : ""}`;
 }
 
 export default function ShootDayPage() {
@@ -309,11 +320,13 @@ export default function ShootDayPage() {
         <Panel title="Shoot details">
           <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
             {[
-              ["Date", "shoot_date", "date"], ["Shoot location", "location"], ["Script location", "script_location"], ["Shift", "shift"],
+              ["Date", "shoot_date", "date"], ["Shoot location", "location"], ["Script location", "script_location"], ["@shift"],
               ["Call time", "call_time", "time"], ["Roll time", "roll_time", "time"], ["Pack-up", "packup_time", "time"], ["@scenes_planned"], ["@scenes_executed"], ["Director", "director"], ["DOP", "dop"], ["Production designer", "production_designer"],
               ["Associate producer", "associate_producer"], ["Line producer", "line_producer"], ["Auditor(s)", "auditors"],
             ].map(([label, key, type]) =>
-              label === "@scenes_planned" ? (
+              label === "@shift" ? (
+                <TimeRange key={label} label="Shift (in to out)" disabled={!canEdit} from={hhmm(day.shift_in_time)} to={hhmm(day.shift_out_time)} hint={shiftHint(day)} onSave={(p) => sd.editDay(p)} />
+              ) : label === "@scenes_planned" ? (
                 <SceneChips key={label} label="Scenes planned" disabled={!canEdit} value={day.scenes_planned} onSave={(v) => sd.editDay({ scenes_planned: v })} />
               ) : label === "@scenes_executed" ? (
                 <SceneChips key={label} label="Scenes executed" disabled={!canEdit} value={day.scenes_executed} onSave={(v) => sd.editDay({ scenes_executed: v })} />

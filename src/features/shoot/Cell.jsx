@@ -4,7 +4,7 @@ import { rupeesInWords } from "../../lib/money.js";
 const LABEL = "cell-label mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-ink/45";
 
 /** A small labelled input that saves when you leave it (not on every key). */
-export function Cell({ label, value, onSave, type = "text", disabled = false, className = "", placeholder, min }) {
+export function Cell({ label, value, onSave, type = "text", disabled = false, className = "", placeholder, min, hint }) {
   const [v, setV] = useState(value ?? "");
   const [focus, setFocus] = useState(false);
   useEffect(() => {
@@ -32,6 +32,7 @@ export function Cell({ label, value, onSave, type = "text", disabled = false, cl
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         className={`input !py-1.5 text-sm disabled:opacity-60 ${type === "time" ? "!px-2" : ""}`}
       />
+      {hint && <span className="mt-0.5 block text-[11px] font-semibold text-ink/55">{hint}</span>}
       {type === "number" && /₹/.test(label) && v !== "" && <span className="cell-hint mt-0.5 block text-[11px] font-medium text-ink/50">{rupeesInWords(v)}</span>}
     </label>
   );
@@ -130,6 +131,43 @@ export function SceneChips({ label, value, onSave, disabled = false, className =
         {disabled && list.length === 0 && <span className="px-1 text-sm text-ink/40">None</span>}
       </div>
       {err ? <span className="mt-0.5 block text-[11px] font-medium text-brand">{err}</span> : null}
+    </div>
+  );
+}
+
+/** In and out time in ONE field: [ 09:00 AM ] to [ 09:00 PM ]. Each part saves when you leave it. */
+export function TimeRange({ label, from, to, onSave, disabled = false, hint, className = "" }) {
+  const [a, setA] = useState(from ?? "");
+  const [b, setB] = useState(to ?? "");
+  const [focus, setFocus] = useState(false);
+  useEffect(() => {
+    if (!focus) {
+      setA(from ?? "");
+      setB(to ?? "");
+    }
+  }, [from, to, focus]);
+
+  function leave(e) {
+    // only when focus leaves the whole field, not when moving from "in" to "out"
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setFocus(false);
+    const patch = {};
+    if (a !== (from ?? "") && a !== "") patch.shift_in_time = a;
+    if (b !== (to ?? "") && b !== "") patch.shift_out_time = b;
+    if (a === "") setA(from ?? "");
+    if (b === "") setB(to ?? "");
+    if (Object.keys(patch).length) onSave(patch);
+  }
+  const part = "min-w-0 flex-1 bg-transparent px-1 py-1 text-sm outline-none disabled:opacity-60 [&::-webkit-calendar-picker-indicator]:hidden";
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <span className={LABEL}>{label}</span>
+      <div onFocus={() => setFocus(true)} onBlur={leave} className="flex min-h-[34px] items-center gap-1 rounded-lg border border-line bg-white px-2 focus-within:border-ink focus-within:ring-2 focus-within:ring-brand/20">
+        <input type="time" aria-label={`${label} in`} value={a} disabled={disabled} onChange={(e) => setA(e.target.value)} className={part} />
+        <span className="text-xs font-semibold text-ink/40">to</span>
+        <input type="time" aria-label={`${label} out`} value={b} disabled={disabled} onChange={(e) => setB(e.target.value)} className={part} />
+      </div>
+      {hint && <span className="mt-0.5 block text-[11px] font-semibold text-ink/55">{hint}</span>}
     </div>
   );
 }
