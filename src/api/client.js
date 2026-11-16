@@ -60,7 +60,8 @@ export class ApiError extends Error {
 }
 
 async function send(path, { method = "GET", body, auth = true } = {}) {
-  const headers = { "Content-Type": "application/json" };
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  const headers = isForm ? {} : { "Content-Type": "application/json" }; // never set Content-Type for FormData
   if (auth && access) headers.Authorization = `Bearer ${access}`;
 
   let res;
@@ -68,7 +69,7 @@ async function send(path, { method = "GET", body, auth = true } = {}) {
     res = await fetch(BASE + path, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(0, "network_error", "Cannot reach the server.");

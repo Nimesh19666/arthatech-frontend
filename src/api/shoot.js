@@ -43,3 +43,7 @@ export const removeDayTeam = (dayTeamId) => api(`/day-teams/${dayTeamId}`, { met
 
 export const listProjectTeams = async (projectId) => list(await api(`/projects/${projectId}/teams`));
 export const listMembers = async (teamId) => list(await api(`/teams/${teamId}/members`));
+
+export const receipts = (dayId) => api(`/shoot-days/${dayId}/receipts`);
+export const uploadReceipt = (dayId, form) => api(`/shoot-days/${dayId}/receipts`, { method: "POST", body: form });
+export const deleteReceipt = (id) => api(`/receipts/${id}`, { method: "DELETE" });

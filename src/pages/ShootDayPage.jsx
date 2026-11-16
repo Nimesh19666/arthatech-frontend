@@ -4,8 +4,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
 import { Cell, SceneChips, TimeRange } from "../features/shoot/Cell.jsx";
+import Receipts from "../features/shoot/Receipts.jsx";
 import TeamSection, { TeamList } from "../features/shoot/TeamSection.jsx";
-import { AUDIT, fdate, hhmm, isEditable, paiseToRupees } from "../features/shoot/format";
+import { AUDIT, auditInfo, fdate, hhmm, isEditable, paiseToRupees } from "../features/shoot/format";
 import { cacheKey, computeTotals, useShootDay } from "../features/shoot/useShootDay";
 import { Alert, Badge, Button, Field } from "../components/ui.jsx";
 import FormModal from "../components/FormModal.jsx";
@@ -168,7 +169,7 @@ export default function ShootDayPage() {
   const totals = computeTotals(model);
   const pct = totals.budget_paise ? Math.min(100, (totals.spent_paise / totals.budget_paise) * 100) : 0;
   const over = totals.budget_paise > 0 && totals.spent_paise > totals.budget_paise;
-  const a = AUDIT[status] || AUDIT.draft;
+  const a = auditInfo(status);
 
   const rows = day.teams.filter((r) => {
     if (!onlyActive) return true;
@@ -310,6 +311,11 @@ export default function ShootDayPage() {
       </div>
 
       {state.source === "cache" && <Alert tone="info">Showing the copy saved on this device. It will refresh when you are back online.</Alert>}
+      {a.unknown && (
+        <Alert tone="error">
+          This day has an old status (“{status}”) that the new review flow does not know, so it is locked. The backend needs to convert old days: pending → draft, query_raised → recheck, verified → approved.
+        </Alert>
+      )}
       {status === "recheck" && day.audit_note && (
         <Alert tone="error">
           <b>Sent back for recheck:</b> {day.audit_note}
@@ -431,6 +437,12 @@ export default function ShootDayPage() {
         </Panel>
       )}
 
+      {step === "teams" && can("shoot_day.view") && (
+        <Panel title="Overall bills (whole day)" fold hint="Bills that are not for one team">
+          <Receipts dayId={day.id} teams={day.teams} scope="day" canChange={editable && can("shoot_day.edit")} offline={offline} />
+        </Panel>
+      )}
+
       {step === "teams" && (
         <Panel
           title="Teams: attendance, vehicles, expenses"
@@ -453,6 +465,7 @@ export default function ShootDayPage() {
                   <TeamSection
                     key={selRow.day_team_id}
                     row={selRow}
+                    dayId={day.id}
                     tab={model.tabs[selRow.day_team_id]}
                     sd={sd}
                     canEdit={canEdit}
@@ -475,6 +488,12 @@ export default function ShootDayPage() {
               <p className="text-xs text-ink/50 sm:col-span-2">Type the totals printed on the paper so the app can compare. These two numbers stay on this device only.</p>
             </div>
           </Panel>
+
+          {can("shoot_day.view") && (
+            <Panel title="Bills and receipts">
+              <Receipts dayId={day.id} teams={day.teams} canChange={editable && can("shoot_day.edit")} offline={offline} />
+            </Panel>
+          )}
 
           <section className={`rounded-2xl border p-4 ${attention.length ? "border-brand/40 bg-brand-light/40" : "border-line bg-white"}`}>
             <h3 className="font-extrabold">{attention.length ? `${attention.length} thing${attention.length === 1 ? "" : "s"} to look at` : "Everything checked looks clean"}</h3>

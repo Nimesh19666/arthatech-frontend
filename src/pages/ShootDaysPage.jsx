@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
-import { AUDIT, fdate, hhmm } from "../features/shoot/format";
+import { AUDIT, auditInfo, fdate, hhmm } from "../features/shoot/format";
 import { cacheKey } from "../features/shoot/useShootDay";
 import { Alert, Badge, Button } from "../components/ui.jsx";
 import FormModal from "../components/FormModal.jsx";
 import { CardsSkeleton } from "../components/Skeleton.jsx";
 import { useSyncStatus } from "../components/SyncBadge.jsx";
 import { errorText } from "../lib/errors.js";
+import { useConfirm } from "../components/Confirm.jsx";
+import { useToast } from "../components/Toast.jsx";
 import * as idb from "../lib/idb";
 import { formatPaiseShort } from "../lib/money.js";
 
@@ -19,6 +21,8 @@ export default function ShootDaysPage() {
   const state = useLocation().state || {};
   const navigate = useNavigate();
   const { can } = useAuth();
+  const confirm = useConfirm();
+  const toast = useToast();
   const sync = useSyncStatus();
   const [days, setDays] = useState(null);
   const [error, setError] = useState(null);
@@ -68,6 +72,19 @@ export default function ShootDaysPage() {
       if (!(await idb.kvGet(k))) idb.kvSet(k, { day, tabs: {}, members: {} });
     }).catch(() => warmed.current.delete(id));
   };
+
+  async function remove(d) {
+    const ok = await confirm({ title: `Delete Shoot Day ${d.day_no}?`, message: "All its attendance, expenses and vouchers will be removed. This cannot be undone.", confirmLabel: "Delete" });
+    if (!ok) return;
+    try {
+      await shoot.deleteDay(d.id);
+      setDays((cur) => (cur || []).filter((x) => x.id !== d.id));
+      idb.kvSet(cacheKey(`days:${projectId}`), (days || []).filter((x) => x.id !== d.id));
+      toast.success(`Shoot Day ${d.day_no} deleted`);
+    } catch (e) {
+      toast.error(errorText(e));
+    }
+  }
 
   const all = days || [];
   const count = (s) => all.filter((d) => d.audit_status === s).length;
@@ -139,7 +156,7 @@ export default function ShootDaysPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {list.map((d) => {
               const t = d.totals || {};
-              const a = AUDIT[d.audit_status] || AUDIT.draft;
+              const a = auditInfo(d.audit_status);
               const pct = t.budget_paise ? Math.min(100, (t.spent_paise / t.budget_paise) * 100) : 0;
               const over = t.budget_paise > 0 && t.spent_paise > t.budget_paise;
               return (
@@ -168,6 +185,11 @@ export default function ShootDaysPage() {
                   </div>
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-mist"><div className={`h-full ${over ? "bg-brand-dark" : "bg-ink"}`} style={{ width: `${pct}%` }} /></div>
                     </>
+                  )}
+                  {can("shoot_day.edit") && d.audit_status === "draft" && sync.online && (
+                    <div className="mt-3 flex justify-end">
+                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); remove(d); }} className="cursor-pointer rounded-lg px-2 py-1 text-xs font-semibold text-brand hover:bg-brand-light">Delete</button>
+                    </div>
                   )}
                 </Link>
               );

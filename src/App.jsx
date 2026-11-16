@@ -14,12 +14,12 @@ import ProjectsPage from "./pages/ProjectsPage.jsx";
 import ShootDaysPage from "./pages/ShootDaysPage.jsx";
 import ShootDayPage from "./pages/ShootDayPage.jsx";
 
-/** Auditors land on the shoot days of their own project. Everyone else sees the dashboard. */
+/** Auditors land on their Projects page after login. Everyone else sees the dashboard. */
 function Home() {
   const { me, can } = useAuth();
   const pid = me?.profile?.project_id ?? me?.project_id ?? me?.project?.id ?? me?.profile?.project?.id;
   const fieldOnly = ["auditor", "head_auditor"].includes(me?.profile?.role_code) || (can("shoot_day.view") && !can("house.create") && !can("users.view") && !can("project.create"));
-  if (fieldOnly && pid) return <Navigate to={`/projects/${pid}/shoot-days`} replace />;
+  if (fieldOnly && pid) return <Navigate to="/projects" replace />;
   return <DashboardPage />;
 }
 

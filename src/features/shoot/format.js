@@ -30,6 +30,8 @@ export const AUDIT = {
   approved: { label: "Approved", tone: "dark" },
   rejected: { label: "Rejected", tone: "red" },
 };
+/** Badge info. A status the new flow does not know (old data) is shown as it is, never hidden as "Draft". */
+export const auditInfo = (status) => AUDIT[status] || { label: `Old status: ${status || "none"}`, tone: "red", unknown: true };
 /** Only these can be edited. Everything else is locked. */
 export const EDITABLE = ["draft", "recheck"];
 export const isEditable = (status) => !status || EDITABLE.includes(status);

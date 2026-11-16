@@ -1,3 +1,4 @@
+import Receipts from "./Receipts.jsx";
 import { useEffect, useState } from "react";
 import FormModal from "../../components/FormModal.jsx";
 import { Alert, Badge, Button, Field, Modal } from "../../components/ui.jsx";
@@ -118,7 +119,7 @@ function AddPersonModal({ sd, row, tab, onClose }) {
 }
 
 /** The panel for ONE team (chosen from the list on the left) */
-export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTeam }) {
+export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTeam, dayId }) {
   const confirm = useConfirm();
   const [modal, setModal] = useState(null);
   const dt = row.day_team_id;
@@ -245,6 +246,13 @@ export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTea
                   </Row>
                 ))}
               </div>
+
+              {dayId && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-ink/50">Bills</h4>
+                  <div className="rounded-xl border border-line bg-white"><Receipts dayId={dayId} teams={[]} scope={row.team_id} canChange={canEdit} offline={!online} /></div>
+                </div>
+              )}
 
               {canEdit && (
                 <button disabled={!online} onClick={removeTeam} title={online ? "" : "Needs internet"} className="cursor-pointer text-xs font-semibold text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-40">
