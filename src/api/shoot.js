@@ -1,5 +1,5 @@
 import { getSyncScope } from "../lib/outbox";
-import { api } from "./client";
+import { api, download } from "./client";
 
 const list = (d) => (Array.isArray(d) ? d : d?.results || []);
 
@@ -47,3 +47,6 @@ export const listMembers = async (teamId) => list(await api(`/teams/${teamId}/me
 export const receipts = (dayId) => api(`/shoot-days/${dayId}/receipts`);
 export const uploadReceipt = (dayId, form) => api(`/shoot-days/${dayId}/receipts`, { method: "POST", body: form });
 export const deleteReceipt = (id) => api(`/receipts/${id}`, { method: "DELETE" });
+
+export const reportXlsx = (projectId, from, to, approvedOnly) =>
+  download(`/projects/${projectId}/reports/shoot-days.xlsx?date_from=${from}&date_to=${to}${approvedOnly ? "&approved_only=1" : ""}`);

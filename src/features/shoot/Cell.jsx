@@ -4,7 +4,7 @@ import { rupeesInWords } from "../../lib/money.js";
 const LABEL = "cell-label mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-ink/45";
 
 /** A small labelled input that saves when you leave it (not on every key). */
-export function Cell({ label, value, onSave, type = "text", disabled = false, className = "", placeholder, min, hint, noIcon }) {
+export function Cell({ label, value, onSave, type = "text", disabled = false, className = "", placeholder, min, hint, noIcon, maxLength }) {
   const [v, setV] = useState(value ?? "");
   const [focus, setFocus] = useState(false);
   useEffect(() => {
@@ -25,6 +25,7 @@ export function Cell({ label, value, onSave, type = "text", disabled = false, cl
         min={min}
         value={v}
         placeholder={placeholder}
+        maxLength={maxLength}
         disabled={disabled}
         onFocus={() => setFocus(true)}
         onChange={(e) => setV(e.target.value)}

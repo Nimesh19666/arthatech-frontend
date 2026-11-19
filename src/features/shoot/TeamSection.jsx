@@ -1,9 +1,11 @@
+import * as shoot from "../../api/shoot";
 import Receipts from "./Receipts.jsx";
 import { useEffect, useState } from "react";
 import FormModal from "../../components/FormModal.jsx";
 import { Alert, Badge, Button, Field, Modal } from "../../components/ui.jsx";
 import { Skeleton } from "../../components/Skeleton.jsx";
 import { useConfirm } from "../../components/Confirm.jsx";
+import { isTmp } from "../../lib/outbox.js";
 import { formatPaise, rupeesToPaise } from "../../lib/money.js";
 import { Cell, Pick, Tick } from "./Cell.jsx";
 import { PAY_MODES, fmtHours, hhmm, paiseToRupees } from "./format";
@@ -44,8 +46,8 @@ const PEOPLE_COLS = "@3xl:grid-cols-[minmax(0,1.3fr)_8rem_8rem_4.5rem_6.5rem_5re
 const PEOPLE_HEAD = ["Name", "In", "Out", "Hours", "Status", "Paid ₹", "Remarks", "Signed"];
 const VEH_COLS = "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_5.75rem_5.75rem_5rem_5rem_5.5rem_2rem]";
 const VEH_HEAD = ["Vehicle no.", "Type", "Vendor", "Driver", "Report", "Pack-up", "Start km", "End km", "Amount ₹"];
-const EXP_COLS = "@3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_4.5rem_6rem_9.5rem_minmax(0,1fr)_3.5rem_2rem]";
-const EXP_HEAD = ["Item", "Vendor", "Qty", "Amount ₹", "Paid by", "Remarks", "Bill"];
+const EXP_COLS = "@3xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,0.9fr)_3.5rem_5.5rem_8.5rem_minmax(0,0.9fr)_3.5rem_2rem]";
+const EXP_HEAD = ["Name", "Item", "Vendor", "Qty", "Amount ₹", "Paid by", "Remarks", "Bill"];
 
 function AddPersonModal({ sd, row, tab, onClose }) {
   const [members, setMembers] = useState(null);
@@ -122,6 +124,11 @@ function AddPersonModal({ sd, row, tab, onClose }) {
 export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTeam, dayId }) {
   const confirm = useConfirm();
   const [modal, setModal] = useState(null);
+  const [billFor, setBillFor] = useState(null);
+  const [bills, setBills] = useState([]);
+  const reloadBills = () => { if (dayId && online) shoot.receipts(dayId).then(setBills).catch(() => {}); };
+  useEffect(() => { reloadBills(); }, [dayId, online]); // eslint-disable-line react-hooks/exhaustive-deps
+  const billCount = (id) => bills.filter((b) => b.work_entry_id === id).length;
   const dt = row.day_team_id;
   const off = !canEdit;
   const crew = tab?.team.kind === "crew";
@@ -187,6 +194,11 @@ export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTea
                         <div className="col-span-2 min-w-0 @3xl:col-span-1">
                           <p className="break-words text-sm font-bold leading-tight">{e.name}</p>
                           {e.role && <p className="break-words text-xs text-ink/50">{e.role}</p>}
+                          {dayId && !isTmp(e.id) && (canEdit || billCount(e.id) > 0) && (
+                            <button type="button" disabled={!online} onClick={() => setBillFor(e)} title={online ? "" : "Needs internet"} className="mt-0.5 cursor-pointer text-xs font-semibold text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-40">
+                              {billCount(e.id) > 0 ? `🧾 ${billCount(e.id)} bill${billCount(e.id) === 1 ? "" : "s"}` : "+ Bill"}
+                            </button>
+                          )}
                         </div>
                       }
                     >
@@ -236,6 +248,7 @@ export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTea
                 {tab.expenses.length > 0 && <Head cols={EXP_COLS} labels={EXP_HEAD} />}
                 {tab.expenses.map((x) => (
                   <Row key={x.id} cols={EXP_COLS} disabled={off} onRemove={() => sd.removeExpense(dt, x.id)}>
+                    <Cell label="Name" placeholder="–" maxLength={150} disabled={off} value={x.name || ""} onSave={(v) => sd.editExpense(dt, x.id, { name: v.trim() })} />
                     <Cell label="Item" disabled={off} value={x.description} onSave={(v) => v.trim() && sd.editExpense(dt, x.id, { description: v.trim() })} />
                     <Cell label="Vendor" disabled={off} value={x.vendor} onSave={(v) => sd.editExpense(dt, x.id, { vendor: v })} />
                     <Cell label="Qty" disabled={off} value={x.quantity} onSave={(v) => sd.editExpense(dt, x.id, { quantity: v })} />
@@ -300,10 +313,16 @@ export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTea
           onClose={() => setModal(null)}
         />
       )}
+      {billFor && (
+        <Modal title={`Bills for ${billFor.name}`} onClose={() => { setBillFor(null); reloadBills(); }}>
+          <Receipts dayId={dayId} teams={[]} entryId={billFor.id} canChange={canEdit} offline={!online} onChanged={reloadBills} />
+        </Modal>
+      )}
       {modal === "expense" && (
         <FormModal
           title="Add expense"
           fields={[
+            { name: "name", label: "Name (who spent or was paid)", maxLength: 150 },
             { name: "description", label: "Item", required: true },
             { name: "vendor", label: "Vendor" },
             { name: "amount", label: "Amount (₹)", type: "number", min: 0 },
@@ -311,7 +330,7 @@ export default function TeamSection({ row, tab, sd, canEdit, online, onRemoveTea
           ]}
           initial={{ pay_mode: "cash_voucher" }}
           onSubmit={(v) => {
-            sd.addExpense(dt, { description: v.description.trim(), vendor: v.vendor.trim(), amount_paise: rupees(v.amount), has_bill: true, pay_mode: v.pay_mode || "cash_voucher" });
+            sd.addExpense(dt, { ...(v.name?.trim() ? { name: v.name.trim() } : {}), description: v.description.trim(), vendor: v.vendor.trim(), amount_paise: rupees(v.amount), has_bill: true, pay_mode: v.pay_mode || "cash_voucher" });
             setModal(null);
           }}
           onClose={() => setModal(null)}

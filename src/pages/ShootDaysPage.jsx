@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import * as shoot from "../api/shoot";
 import { useAuth } from "../features/auth/AuthContext.jsx";
 import { AUDIT, auditInfo, fdate, hhmm } from "../features/shoot/format";
 import { cacheKey } from "../features/shoot/useShootDay";
 import { Alert, Badge, Button } from "../components/ui.jsx";
+import ReportModal from "../features/shoot/ReportModal.jsx";
 import FormModal from "../components/FormModal.jsx";
 import { CardsSkeleton } from "../components/Skeleton.jsx";
 import { useSyncStatus } from "../components/SyncBadge.jsx";
@@ -28,6 +29,7 @@ export default function ShootDaysPage() {
   const [error, setError] = useState(null);
   const [cached, setCached] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [filter, setFilter] = useState("all");
 
   const fresh = useRef(false);
@@ -88,7 +90,16 @@ export default function ShootDaysPage() {
 
   const all = days || [];
   const count = (s) => all.filter((d) => d.audit_status === s).length;
-  const list = filter === "all" ? all : all.filter((d) => d.audit_status === filter);
+  const list0 = filter === "all" ? all : all.filter((d) => d.audit_status === filter);
+  // Several shoots can fall on one date (main unit, second unit). Keep the date order, and inside a date sort by day number.
+  const groups = [];
+  for (const d of list0) {
+    let g = groups.find((x) => x.date === d.shoot_date);
+    if (!g) groups.push((g = { date: d.shoot_date, items: [] }));
+    g.items.push(d);
+  }
+  groups.forEach((g) => g.items.sort((a, b) => a.day_no - b.day_no));
+  const list = groups.flatMap((g) => g.items);
   const sum = (f) => all.reduce((a, d) => a + (Number(f(d.totals || {})) || 0), 0);
 
   return (
@@ -99,9 +110,14 @@ export default function ShootDaysPage() {
           <h1 className="mt-1 text-4xl font-black tracking-tight">Shoot days</h1>
           {refreshing && days && <p className="mt-1 text-xs font-semibold text-ink/40">Refreshing…</p>}
         </div>
-        {can("shoot_day.edit") && (
-          <Button disabled={!sync.online} title={sync.online ? "" : "Needs internet"} onClick={() => setAdding(true)}>+ Shoot day</Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {can("report.export") && (
+            <Button variant="outline" disabled={!sync.online} title={sync.online ? "" : "Needs internet"} onClick={() => setReporting(true)}>Excel report</Button>
+          )}
+          {can("shoot_day.edit") && (
+            <Button disabled={!sync.online} title={sync.online ? "" : "Needs internet"} onClick={() => setAdding({ date: null })}>+ Shoot day</Button>
+          )}
+        </div>
       </div>
 
       {cached && <Alert tone="info">You are offline. Showing the list saved on this device.</Alert>}
@@ -154,7 +170,18 @@ export default function ShootDaysPage() {
           )}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {list.map((d) => {
+            {groups.map((g) => (
+              <Fragment key={g.date || "none"}>
+                {g.items.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-3">
+                    <h3 className="text-sm font-extrabold">{fdate(g.date)}</h3>
+                    <Badge>{g.items.length} shoots</Badge>
+                    {can("shoot_day.edit") && sync.online && (
+                      <button onClick={() => setAdding({ date: g.date })} className="cursor-pointer text-xs font-semibold text-brand hover:underline">+ Another shoot on this date</button>
+                    )}
+                  </div>
+                )}
+                {g.items.map((d) => {
               const t = d.totals || {};
               const a = auditInfo(d.audit_status);
               const pct = t.budget_paise ? Math.min(100, (t.spent_paise / t.budget_paise) * 100) : 0;
@@ -186,17 +213,22 @@ export default function ShootDaysPage() {
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-mist"><div className={`h-full ${over ? "bg-brand-dark" : "bg-ink"}`} style={{ width: `${pct}%` }} /></div>
                     </>
                   )}
-                  {can("shoot_day.edit") && d.audit_status === "draft" && sync.online && (
-                    <div className="mt-3 flex justify-end">
-                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); remove(d); }} className="cursor-pointer rounded-lg px-2 py-1 text-xs font-semibold text-brand hover:bg-brand-light">Delete</button>
+                  {can("shoot_day.edit") && sync.online && (
+                    <div className="mt-3 flex justify-end gap-1">
+                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAdding({ date: d.shoot_date }); }} className="cursor-pointer rounded-lg px-2 py-1 text-xs font-semibold text-brand hover:bg-brand-light">+ Another shoot this date</button>
+                      {d.audit_status === "draft" && <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); remove(d); }} className="cursor-pointer rounded-lg px-2 py-1 text-xs font-semibold text-brand hover:bg-brand-light">Delete</button>}
                     </div>
                   )}
                 </Link>
               );
             })}
+              </Fragment>
+            ))}
           </div>
         </>
       )}
+
+      {reporting && <ReportModal projectId={projectId} onClose={() => setReporting(false)} />}
 
       {adding && (
         <FormModal
@@ -206,7 +238,7 @@ export default function ShootDaysPage() {
             { name: "shoot_date", label: "Date", type: "date", required: true },
             { name: "location", label: "Location" },
           ]}
-          initial={{ shoot_date: today() }}
+          initial={{ shoot_date: adding.date || today() }}
           onSubmit={async (v) => {
             const created = await shoot.createDay(projectId, { shoot_date: v.shoot_date, ...(v.location.trim() ? { location: v.location.trim() } : {}) });
             navigate(`/shoot-days/${created.id}`);

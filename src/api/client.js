@@ -149,3 +149,29 @@ async function call(path, opts = {}) {
     throw e;
   }
 }
+
+/** Download a file (for example an Excel report). Sends the login token, retries once after a refresh. */
+export async function download(path) {
+  const go = () =>
+    fetch(BASE + path, { headers: access ? { Authorization: `Bearer ${access}` } : {} }).catch(() => {
+      throw new ApiError(0, "network_error", "Cannot reach the server.");
+    });
+  let res = await go();
+  if (res.status === 401 && refresh) {
+    await refreshTokens();
+    res = await go();
+  }
+  if (!res.ok) {
+    let data = null;
+    try {
+      data = JSON.parse(await res.text());
+    } catch {
+      /* not JSON */
+    }
+    const err = data && data.error;
+    throw new ApiError(res.status, (err && err.code) || "server_error", (err && err.message) || "Could not download the report.", (err && err.fields) || {});
+  }
+  const cd = res.headers.get("Content-Disposition") || "";
+  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+  return { blob: await res.blob(), filename: m ? decodeURIComponent(m[1]) : null };
+}

@@ -305,7 +305,7 @@ export function useShootDay(dayId) {
       const tmp = newTmpId();
       mutate(
         (m) => {
-          m.tabs[dtId].expenses.push({ id: tmp, vendor: "", quantity: "", amount_paise: 0, has_bill: true, pay_mode: "cash_voucher", remarks: "", ...body });
+          m.tabs[dtId].expenses.push({ id: tmp, name: "", vendor: "", quantity: "", amount_paise: 0, has_bill: true, pay_mode: "cash_voucher", remarks: "", ...body });
         },
         { method: "POST", path: `/day-teams/${dtId}/expenses`, body, label: "New expense", tmp }
       );

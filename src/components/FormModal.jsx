@@ -53,6 +53,8 @@ export default function FormModal({ title, fields, initial = {}, submitLabel = "
               type={f.type}
               required={f.required}
               min={f.min}
+              maxLength={f.maxLength}
+              placeholder={f.placeholder}
               hint={f.hint}
               value={values[f.name]}
               onChange={(e) => set(f.name, e.target.value)}
